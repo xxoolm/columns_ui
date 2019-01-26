@@ -1,0 +1,7 @@
+extraction:
+  cpp:
+    index:
+      solution: vc15/columns_ui-public.sln
+      msbuild:
+        configuration: Release   
+        platform: Win32
