@@ -1,5 +1,6 @@
 parameters:
   installLlvm: ''
+  installVcpkg: ''
   msBuildArgs: ''
   platform: ''
   solution: ''
@@ -14,18 +15,25 @@ steps:
       ((Get-Content -path msbuild\install.bat -Raw) -replace 'Professional','Enterprise') | Set-Content -Path msbuild\install-enterprise.bat
       cmd /c msbuild\install-enterprise.bat
     displayName: Install LLVM
+- ${{ if parameters.installVcpkg }}:
+  - script: |
+      git clone https://github.com/Microsoft/vcpkg.git
+      vcpkg\bootstrap-vcpkg.bat
+    displayName: Install Vcpkg
 - ${{ if parameters.vcpkgPackages }}:
   - powershell: |
-      vcpkg integrate install
-      vcpkg install ${{ parameters.vcpkgPackages }}
+      & $Env:VCPKG_PATH integrate install
+      & $Env:VCPKG_PATH install ${{ parameters.vcpkgPackages }}
+    env:
+      ${{ if parameters.installVcpkg }}:
+        VCPKG_PATH: .\vcpkg\vcpkg
+      ${{ if not(parameters.installVcpkg) }}:
+        VCPKG_PATH: vcpkg
     displayName: Install dependencies
 - task: VSBuild@1
   displayName: Build
   inputs:
-    ${{ if parameters.solution }}:
-      solution: ${{ parameters.solution }}
-    ${{ if parameters.platform }}:
-      platform: ${{ parameters.platform }}
-    ${{ if parameters.configuration }}:
-      configuration: ${{ parameters.configuration }}
+    solution: ${{ parameters.solution }}
+    platform: ${{ parameters.platform }}
+    configuration: ${{ parameters.configuration }}
     msbuildArgs: /m ${{ parameters.msBuildArgs }}

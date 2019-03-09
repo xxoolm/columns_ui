@@ -1,0 +1,25 @@
+parameters:
+  name: ''
+  displayName: ''
+  installLlvm: ''
+  installVcpkg: ''
+  msBuildArgs: ''
+  platform: ''
+  solution: ''
+  vcpkgPackages: ''
+  vmImage: ''
+jobs:
+- job: ${{ parameters.name }}
+  displayName: ${{ parameters.displayName }}
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  steps:
+  - template: step-build.yml
+    parameters:
+      configuration: ${{ parameters.configuration }}
+      installLlvm: ${{ parameters.installLlvm }}
+      installVcpkg: ${{ parameters.installVcpkg }}
+      msBuildArgs: ${{ parameters.msBuildArgs }}
+      platform: ${{ parameters.platform }}
+      solution: ${{ parameters.solution }}
+      vcpkgPackages: ${{ parameters.vcpkgPackages }}
