@@ -1,41 +1,44 @@
 variables:
   solution: vc15/columns_ui-public.sln
-  vcpkgPackages: 'ms-gsl range-v3'
+  installVcpkg: ''
+  installLlvm: ''
+  msBuildArgs: ''
   platform: Win32
+  vcpkgPackages: 'ms-gsl range-v3'
+  LlvmMsBuildArgs: /p:PlatformToolset=llvm;UseLldLink=False;SpectreMitigation=
+  vs2019MsBuildArgs: /p:PlatformToolset=v142
 jobs:
-- job: vs2017
-  displayName: VS 2017 v141
-  pool:
-    vmImage: vs2017-win2016
+- job: build
+  displayName: Build
   strategy:
     matrix:
-      Release:
+      VS 2017 v141 Release:
         configuration: Release
-      Debug:
+        vmImage: vs2017-win2016
+      VS 2017 v141 Debug:
         configuration: Debug
-  steps:
-  - template: step-build.yml
-    parameters:
-      configuration: $(configuration)
-      platform: $(platform)
-      solution: $(solution)
-      vcpkgPackages: $(vcpkgPackages)
-- job: llvm
-  displayName: VS 2017 LLVM
+        vmImage: vs2017-win2016
+      VS 2019 v142 Release:
+        configuration: Release
+        installVcpkg: 'true'
+        msBuildArgs: $(vs2019MsBuildArgs)
+        vmImage: windows-2019
+      VS 2019 v142 Debug:
+        configuration: Debug
+        installVcpkg: 'true'
+        msBuildArgs: $(vs2019MsBuildArgs)
+        vmImage: windows-2019
+      VS 2017 LLVM Release:
+        configuration: Release
+        installLlvm: 'true'
+        msBuildArgs: $(LlvmMsBuildArgs)
+        vmImage: vs2017-win2016
+      VS 2017 LLVM Debug:
+        configuration: Debug
+        installLlvm: 'true'
+        msBuildArgs: $(LlvmMsBuildArgs)
+        vmImage: vs2017-win2016
   pool:
-    vmImage: vs2017-win2016
-  strategy:
-    matrix:
-      Release:
-        configuration: Release
-      Debug:
-        configuration: Debug
+    vmImage: $(vmImage)
   steps:
   - template: step-build.yml
-    parameters:
-      configuration: $(configuration)
-      installLlvm: true
-      msBuildArgs: /p:PlatformToolset=llvm;UseLldLink=False;SpectreMitigation=
-      platform: $(platform)
-      solution: $(solution)
-      vcpkgPackages: $(vcpkgPackages)

@@ -1,31 +1,40 @@
-parameters:
-  installLlvm: ''
-  msBuildArgs: ''
-  platform: ''
-  solution: ''
-  vcpkgPackages: ''
 steps:
 - checkout: self
   submodules: recursive
-- ${{ if parameters.installLlvm }}:
+- script: |
+    echo ${{ variables.installLlvm }}
+    echo ${{ variables.installVcpkg }}
+    echo ${{ variables.msBuildArgs }}
+    echo ${{ variables.platform }}
+    echo ${{ variables.solution }}
+    echo ${{ variables.vcpkgPackages }}
+  displayName: Print configuration
+- ${{ if variables.installLlvm }}:
   - powershell: |
       choco install llvm
       svn checkout https://github.com/llvm/llvm-project/trunk/llvm/tools/msbuild
       ((Get-Content -path msbuild\install.bat -Raw) -replace 'Professional','Enterprise') | Set-Content -Path msbuild\install-enterprise.bat
       cmd /c msbuild\install-enterprise.bat
     displayName: Install LLVM
-- ${{ if parameters.vcpkgPackages }}:
+- ${{ if variables.installVcpkg }}:
+  - script: |
+      git clone https://github.com/Microsoft/vcpkg.git
+      vcpkg\bootstrap-vcpkg.bat
+    displayName: Install Vcpkg
+- ${{ if variables.vcpkgPackages }}:
   - powershell: |
-      vcpkg integrate install
-      vcpkg install ${{ parameters.vcpkgPackages }}
+      & $Env:VCPKG_PATH integrate install
+      & $Env:VCPKG_PATH install ${{ variables.vcpkgPackages }}
+    env:
+      ${{ if variables.installVcpkg }}:
+        VCPKG_PATH: .\vcpkg\vcpkg
+      ${{ if not(variables.installVcpkg) }}:
+        VCPKG_PATH: vcpkg
     displayName: Install dependencies
 - task: VSBuild@1
   displayName: Build
   inputs:
-    ${{ if parameters.solution }}:
-      solution: ${{ parameters.solution }}
-    ${{ if parameters.platform }}:
-      platform: ${{ parameters.platform }}
-    ${{ if parameters.configuration }}:
-      configuration: ${{ parameters.configuration }}
-    msbuildArgs: /m ${{ parameters.msBuildArgs }}
+    solution: ${{ variables.solution }}
+    platform: ${{ variables.platform }}
+    configuration: ${{ variables.configuration }}
+    msbuildArgs: /m ${{ variables.msBuildArgs }}
