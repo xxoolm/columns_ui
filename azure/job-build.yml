@@ -1,0 +1,27 @@
+parameters:
+  name: ''
+  displayName: ''
+  installLlvm: ''
+  installVcpkg: ''
+  matrix: {}
+  msBuildArgs: ''
+  platform: ''
+  solution: ''
+  vcpkgPackages: ''
+  vmImage: ''
+jobs:
+- ${{ each pair in parameters.matrix }}:
+  - job: ${{ parameters.name }}_${{ pair.key }}
+    displayName: ${{ parameters.displayName }} ${{ pair.value.displayName }}
+    pool:
+      vmImage: ${{ coalesce(pair.value.vmImage, parameters.vmImage) }}
+    steps:
+    - template: step-build.yml
+      parameters:
+        configuration: ${{ coalesce(pair.value.configuration, parameters.configuration) }}
+        installLlvm: ${{ coalesce(pair.value.installLlvm, parameters.installLlvm) }}
+        installVcpkg: ${{ coalesce(pair.value.installVcpkg, parameters.installVcpkg) }}
+        msBuildArgs: ${{ coalesce(pair.value.msBuildArgs, parameters.msBuildArgs) }}
+        platform: ${{ coalesce(pair.value.platform, parameters.platform) }}
+        solution: ${{ coalesce(pair.value.solution, parameters.solution) }}
+        vcpkgPackages: ${{ coalesce(pair.value.vcpkgPackages, parameters.vcpkgPackages) }}
