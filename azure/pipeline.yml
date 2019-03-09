@@ -1,41 +1,44 @@
-variables:
-  solution: vc15/columns_ui-public.sln
-  vcpkgPackages: 'ms-gsl range-v3'
-  platform: Win32
 jobs:
-- job: vs2017
-  displayName: VS 2017 v141
-  pool:
-    vmImage: vs2017-win2016
-  strategy:
+- template: job-build.yml
+  parameters:
+    displayName: VS 2017 v141
     matrix:
-      Release:
-        configuration: Release
       Debug:
         configuration: Debug
-  steps:
-  - template: step-build.yml
-    parameters:
-      configuration: $(configuration)
-      platform: $(platform)
-      solution: $(solution)
-      vcpkgPackages: $(vcpkgPackages)
-- job: llvm
-  displayName: VS 2017 LLVM
-  pool:
-    vmImage: vs2017-win2016
-  strategy:
-    matrix:
       Release:
         configuration: Release
+    name: 'vs2017_release'
+    platform: Win32
+    solution: vc15/columns_ui-public.sln
+    vcpkgPackages: 'ms-gsl range-v3'
+    vmImage: vs2017-win2016
+- template: job-build.yml
+  parameters:
+    displayName: VS 2019 v142
+    installVcpkg: 'true'
+    matrix:
       Debug:
         configuration: Debug
-  steps:
-  - template: step-build.yml
-    parameters:
-      configuration: $(configuration)
-      installLlvm: true
-      msBuildArgs: /p:PlatformToolset=llvm;UseLldLink=False;SpectreMitigation=
-      platform: $(platform)
-      solution: $(solution)
-      vcpkgPackages: $(vcpkgPackages)
+      Release:
+        configuration: Release
+    msBuildArgs: /p:PlatformToolset=v142
+    name: 'vs2019_release'
+    platform: Win32
+    solution: vc15/columns_ui-public.sln
+    vcpkgPackages: 'ms-gsl range-v3'
+    vmImage: windows-2019
+- template: job-build.yml
+  parameters:
+    displayName: VS 2017 LLVM
+    installLlvm: 'true'
+    matrix:
+      Debug:
+        configuration: Debug
+      Release:
+        configuration: Release
+    msBuildArgs: /p:PlatformToolset=llvm;UseLldLink=False;SpectreMitigation=
+    name: 'llvm_release'
+    platform: Win32
+    solution: vc15/columns_ui-public.sln
+    vcpkgPackages: 'ms-gsl range-v3'
+    vmImage: vs2017-win2016
