@@ -11,14 +11,6 @@ jobs:
         configuration: Debug
       v141 Release:
         configuration: Release
-      LLVM Debug:
-        configuration: Debug
-        installLlvm: 'true'
-        msBuildArgs: ${{ variables.llvmMsBuildArgs }}
-      LLVM Release:
-        configuration: Release
-        installLlvm: 'true'
-        msBuildArgs: ${{ variables.llvmMsBuildArgs }}
     name: vs2017
     platform: Win32
     solution: ${{ variables.solution }}
@@ -33,6 +25,14 @@ jobs:
         configuration: Debug
       v142 Release:
         configuration: Release
+      LLVM Debug:
+        configuration: Debug
+        installLlvm: 'true'
+        msBuildArgs: ${{ variables.llvmMsBuildArgs }}
+      LLVM Release:
+        configuration: Release
+        installLlvm: 'true'
+        msBuildArgs: ${{ variables.llvmMsBuildArgs }}
     msBuildArgs: /p:PlatformToolset=v142
     name: vs2019
     platform: Win32

@@ -28,10 +28,10 @@ jobs:
   - checkout: self
     submodules: recursive
   - powershell: |
+      Invoke-WebRequest -Uri "https://github.com/Microsoft/vsixbootstrapper/releases/download/1.0.37/VSIXBootstrapper.exe" -Out "VSIXBootstrapper.exe"
+      Invoke-WebRequest -Uri "https://llvmextensions.gallerycdn.vsassets.io/extensions/llvmextensions/llvm-toolchain/1.0.340780/1535663999089/llvm.vsix" -Out "llvm.vsix"
+      .\VSIXBootstrapper.exe /quiet llvm.vsix
       choco install llvm
-      svn checkout -r351731 https://github.com/llvm/llvm-project/trunk/llvm/tools/msbuild
-      ((Get-Content -path msbuild\install.bat -Raw) -replace 'Professional','Enterprise') | Set-Content -Path msbuild\install-enterprise.bat
-      cmd /c msbuild\install-enterprise.bat
     condition: variables.installLlvm
     displayName: Install LLVM
   - script: |
