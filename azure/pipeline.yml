@@ -31,3 +31,15 @@ jobs:
     solution: ${{ variables.solution }}
     vcpkgPackages: ${{ variables.vcpkgPackages }}
     vmImage: windows-2019
+- template: job-build.yml
+  parameters:
+    displayName: VS 2019 Code analysis
+    matrix:
+      Release:
+        configuration: Release
+    name: vs2019_code_analysis
+    msBuildArgs: /p:RunCodeAnalysis=True
+    platform: Win32
+    solution: ${{ variables.solution }}
+    vcpkgPackages: ${{ variables.vcpkgPackages }}
+    vmImage: windows-2019
