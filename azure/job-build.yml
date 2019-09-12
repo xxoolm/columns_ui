@@ -33,7 +33,6 @@ jobs:
     condition: variables.installLlvm
     displayName: Install LLVM
   - powershell: |
-      vcpkg integrate install
       vcpkg install $(vcpkgPackages)
     condition: variables.vcpkgPackages
     displayName: Install dependencies
