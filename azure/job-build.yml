@@ -27,14 +27,6 @@ jobs:
     submodules: recursive
   - powershell: |
       Set-PSDebug -Trace 1
-      choco install llvm
-      Invoke-WebRequest https://yuo.be/ci/azure-llvm-msbuild-vs2019.zip -OutFile azure-llvm-msbuild-vs2019.zip
-      Expand-Archive azure-llvm-msbuild-vs2019.zip azure-llvm-msbuild-vs2019
-      cmd /c azure-llvm-msbuild-vs2019\install-enterprise.bat
-    condition: variables.installLlvm
-    displayName: Install LLVM
-  - powershell: |
-      Set-PSDebug -Trace 1
       vcpkg version
       vcpkg integrate install
       vcpkg install $(vcpkgInstallArgs)
