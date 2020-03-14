@@ -1,0 +1,52 @@
+name: VS 2019
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-2019
+
+    strategy:
+      matrix:
+        toolset: ['v142', 'llvm']
+        configuration: ['Release', 'Debug']
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        submodules: true
+
+    - name: Set up MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Cache dependencies
+      uses: actions/cache@v1
+      with:
+        path: c:\vcpkg\installed
+        key: ${{ runner.os }}-vcpkg-installed-${{ hashFiles('ports/**/*') }}
+
+    - name: Install dependencies
+      run: |
+        vcpkg integrate install
+        vcpkg install ms-gsl wil range-v3 --overlay-ports=$Env:GITHUB_WORKSPACE\ports
+
+    - name: Build (v142)
+      if: matrix.toolset == 'v142'
+      run: msbuild /m '/p:VCToolsVersion=14.25.28610;Platform=Win32;Configuration=${{ matrix.configuration }}' vc16\columns_ui-public.sln
+
+    - name: Build (LLVM)
+      if: matrix.toolset == 'llvm'
+      run: msbuild /m '/p:Platform=Win32;Configuration=${{ matrix.configuration }};PlatformToolset=ClangCL;UseLldLink=True;VcpkgAutoLink=False;WholeProgramOptimization=False;SpectreMitigation=' vc16\columns_ui-public.sln
+
+    - uses: actions/upload-artifact@v2
+      if: matrix.toolset == 'v142' && matrix.configuration == 'Release'
+      with:
+        name: .fb2k-component
+        path: vc16\Release\foo_ui_columns*.fb2k-component
+
+    - uses: actions/upload-artifact@v2
+      if: matrix.toolset == 'v142' && matrix.configuration == 'Release'
+      with:
+        name: .pdb
+        path: vc16\Release\foo_ui_columns.pdb

@@ -22,10 +22,18 @@ class Version {
             $annotations += 'azure'
         }
     
+        if ($Env:GITHUB_ACTIONS -eq 'true') {
+            $annotations += 'github'
+        }
+    
         if ($Env:BUILD_BUILDID) {
             $annotations += "b$Env:BUILD_BUILDID"
         }
     
+        if ($Env:GITHUB_RUN_ID) {
+            $annotations += "b$Env:GITHUB_RUN_ID.$Env:GITHUB_RUN_NUMBER"
+        }
+
         if ($this.Dirty) {
             $annotations += 'dirty'
         }
