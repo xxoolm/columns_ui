@@ -81,7 +81,7 @@ public:
         return m_helper.create(wnd, IDD_PREFS_NOTIFICATION_AREA,
             [this](auto&&... args) { return ConfigProc(std::forward<decltype(args)>(args)...); });
     }
-    const char* get_name() override { return "Notification area"; }
+    const char* get_name() override { return (char*)u8"系统托盘区"; }
     bool get_help_url(pfc::string_base& p_out) override
     {
         p_out = "http://yuo.be/wiki/columns_ui:config:notification_area";
