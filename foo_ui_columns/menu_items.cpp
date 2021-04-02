@@ -72,8 +72,8 @@ static const MainMenuCommand increase_font{
     "增加播放列表视图字体大小", [] { pvt::set_font_size(true); }};
 
 static const MainMenuCommand show_status_bar{
-    {0x5f944522, 0x843b, 0x43d2, {0x87, 0x14, 0xe3, 0xca, 0x1b, 0x78, 0x2b, 0x1f}}, "Show status bar",
-    "Shows or hides the Columns UI status bar.",
+    {0x5f944522, 0x843b, 0x43d2, {0x87, 0x14, 0xe3, 0xca, 0x1b, 0x78, 0x2b, 0x1f}}, "显示状态栏",
+    "显示或隐藏用户分栏界面状态栏。",
     [] {
         cfg_status = !cfg_status;
         on_show_status_change();
@@ -81,8 +81,8 @@ static const MainMenuCommand show_status_bar{
     [] { return cfg_status != 0; }};
 
 static const MainMenuCommand show_status_pane{
-    {0x6ffa8da6, 0x5cd, 0x403e, {0xa4, 0x87, 0x7e, 0x57, 0x2b, 0xb0, 0xc3, 0x20}}, "Show status pane",
-    "Shows or hides the Columns UI status pane.",
+    {0x6ffa8da6, 0x5cd, 0x403e, {0xa4, 0x87, 0x7e, 0x57, 0x2b, 0xb0, 0xc3, 0x20}}, "显示状态框",
+    "显示或隐藏用户分栏界面框。",
     [] {
         settings::show_status_pane = !settings::show_status_pane;
         on_show_status_pane_change();
@@ -90,16 +90,16 @@ static const MainMenuCommand show_status_pane{
     [] { return settings::show_status_pane != 0; }};
 
 static const MainMenuCommand show_toolbars{
-    {0x2dbb8dd3, 0x2d94, 0x4fd8, {0xa5, 0x7d, 0xbe, 0xb6, 0x42, 0xf5, 0xbf, 0x3b}}, "Show toolbars",
-    "Shows or hides the Columns UI toolbars.",
+    {0x2dbb8dd3, 0x2d94, 0x4fd8, {0xa5, 0x7d, 0xbe, 0xb6, 0x42, 0xf5, 0xbf, 0x3b}}, "显示工具栏",
+    "显示或隐藏用户分栏界面工具栏.",
     [] {
         cfg_toolbars = !cfg_toolbars;
         on_show_toolbars_change();
     },
     [] { return cfg_toolbars != 0; }};
 
-static const MainMenuCommand live_editing{toggle_live_editing_id, "Live editing",
-    "Enables or disables live editing of the Columns UI layout.",
+static const MainMenuCommand live_editing{toggle_live_editing_id, "实时编辑",
+    "启用或禁用对用户分栏界面的实时编辑.",
     [] {
         bool val = !g_layout_window.get_layout_editing_active();
         g_layout_window.set_layout_editing_active(val);

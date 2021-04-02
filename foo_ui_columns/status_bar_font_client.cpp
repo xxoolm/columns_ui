@@ -12,7 +12,7 @@ HFONT g_status_font = nullptr;
 class StatusBarFontClient : public cui::fonts::client {
 public:
     const GUID& get_client_guid() const override { return font_client_status_guid; }
-    void get_name(pfc::string_base& p_out) const override { p_out = "Status bar"; }
+    void get_name(pfc::string_base& p_out) const override { p_out = (char*)u8"状态栏"; }
 
     cui::fonts::font_type_t get_default_font_type() const override { return cui::fonts::font_type_labels; }
 
