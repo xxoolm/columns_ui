@@ -29,10 +29,10 @@ cfg_bool show_status_pane(guids::show_status_pane, true);
 namespace cui::config {
 
 advconfig_branch_factory advconfig_branch_columns_ui(
-    "Columns UI", advconfig_branch_columns_ui_id, advconfig_branch::guid_branch_display, 0);
+    "分栏用户界面", advconfig_branch_columns_ui_id, advconfig_branch::guid_branch_display, 0);
 
 advconfig_branch_factory advconfig_branch_notification_area(
-    "Windows notification area", advconfig_branch_notification_area_id, advconfig_branch_columns_ui_id, 0);
+    "托盘区", advconfig_branch_notification_area_id, advconfig_branch_columns_ui_id, 0);
 
 static GUID advbool_notification_icon_x_buttons_id{
     0xcee3f8cc, 0x7ca6, 0x4277, {0xaa, 0xd4, 0xce, 0xc7, 0xb9, 0xd0, 0x5a, 0x63}};

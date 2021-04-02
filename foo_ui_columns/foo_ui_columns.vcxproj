@@ -112,10 +112,11 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ConformanceMode>true</ConformanceMode>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <Culture>0x0809</Culture>
+      <Culture>0x0004</Culture>
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>Urlmon.lib;comctl32.lib;shell32.lib;shlwapi.lib;gdiplus.lib;../foobar2000/shared/shared.lib;uxtheme.lib;usp10.lib;Windowscodecs.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -126,6 +127,7 @@
       </DataExecutionPrevention>
       <SubSystem>Windows</SubSystem>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PreBuildEvent>
       <Command>powershell -File ..\scripts\pre-build.ps1 -TemplatePath version.h.template -OutputPath version.h</Command>
@@ -618,6 +620,9 @@
     <ProjectReference Include="..\ui_helpers\ui_helpers.vcxproj">
       <Project>{a8c4298d-00f5-46f7-91ba-f503fd581590}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="icons\new folder\square\bitmap1.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

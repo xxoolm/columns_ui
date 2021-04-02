@@ -45,18 +45,18 @@ static mainmenu_group_factory g_mainmenu_group_view_layout_presets_part(
 
 namespace commands {
 
-static const MainMenuCommand activate_now_playing{activate_now_playing_id, "Activate now playing",
-    "Activates the currently playing item.", [] { playlist_manager::get()->highlight_playing_item(); }};
+static const MainMenuCommand activate_now_playing{activate_now_playing_id, "激活正在播放",
+    "激活正在播放的项目", [] { playlist_manager::get()->highlight_playing_item(); }};
 
-static const MainMenuCommand show_groups{show_groups_id, "Show groups", "Shows or hides playlist view groups.",
+static const MainMenuCommand show_groups{show_groups_id, "显示分组", "显示或隐藏播放列表分组",
     [] {
         pvt::cfg_grouping = !pvt::cfg_grouping;
         pvt::PlaylistView::g_on_groups_change();
     },
     [] { return static_cast<bool>(pvt::cfg_grouping); }};
 
-static const MainMenuCommand show_artwork{show_artwork_id, "Show artwork",
-    "Shows or hides playlist view artwork in groups.",
+static const MainMenuCommand show_artwork{show_artwork_id, "显示列表",
+    "分组显示或隐藏播放列表.",
     [] {
         pvt::cfg_show_artwork = !pvt::cfg_show_artwork;
         pvt::PlaylistView::g_on_show_artwork_change();
@@ -64,12 +64,12 @@ static const MainMenuCommand show_artwork{show_artwork_id, "Show artwork",
     [] { return pvt::cfg_show_artwork.get(); }};
 
 static const MainMenuCommand decrease_font{
-    {0xf2bc9f43, 0xf709, 0x4f6f, {0x9c, 0x65, 0x78, 0x73, 0x3b, 0x8, 0xc7, 0x77}}, "Decrease font size",
-    "Decreases the playlist view font size.", [] { pvt::set_font_size(false); }};
+    {0xf2bc9f43, 0xf709, 0x4f6f, {0x9c, 0x65, 0x78, 0x73, 0x3b, 0x8, 0xc7, 0x77}}, "缩小字体大小",
+    "减小播放列表视图字体大小", [] { pvt::set_font_size(false); }};
 
 static const MainMenuCommand increase_font{
-    {0x8553d7fd, 0xebc5, 0x4ae7, {0xaa, 0x28, 0xb2, 0x6, 0xfe, 0x94, 0xa0, 0xb4}}, "Increase font size",
-    "Increases the playlist font size.", [] { pvt::set_font_size(true); }};
+    {0x8553d7fd, 0xebc5, 0x4ae7, {0xaa, 0x28, 0xb2, 0x6, 0xfe, 0x94, 0xa0, 0xb4}}, "增加字体大小",
+    "增加播放列表视图字体大小", [] { pvt::set_font_size(true); }};
 
 static const MainMenuCommand show_status_bar{
     {0x5f944522, 0x843b, 0x43d2, {0x87, 0x14, 0xe3, 0xca, 0x1b, 0x78, 0x2b, 0x1f}}, "Show status bar",

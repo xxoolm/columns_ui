@@ -861,4 +861,7 @@
       <Filter>Resources</Filter>
     </ResourceCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="icons\new folder\square\bitmap1.bmp" />
+  </ItemGroup>
 </Project>

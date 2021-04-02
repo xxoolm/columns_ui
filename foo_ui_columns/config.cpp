@@ -2,7 +2,6 @@
 #include "ng_playlist/ng_playlist.h"
 
 #include "config_host.h"
-
 #include "config.h"
 #include "config_columns_v2.h"
 
@@ -59,11 +58,13 @@ const GUID& config_get_main_guid()
 
 namespace cui {
 namespace prefs {
-service_factory_single_t<PreferencesTabsHost> page_main("Columns UI", g_tabs, tabsize(g_tabs),
+service_factory_single_t<PreferencesTabsHost> page_main((char*)u8"用户分栏界面", g_tabs,
+    tabsize(g_tabs),
     g_guid_columns_ui_preferences_page, preferences_page::guid_display, &cfg_child);
-service_factory_single_t<PreferencesTabsHost> page_playlist_view("Playlist view", g_tabs_playlist_view,
+service_factory_single_t<PreferencesTabsHost> page_playlist_view((char*)u8"播放列表视图", g_tabs_playlist_view,
     tabsize(g_tabs_playlist_view), guid_playlist_view_page, g_guid_columns_ui_preferences_page, &cfg_child_playlist);
-service_factory_single_t<PreferencesTabsHost> page_playlist_switcher("Playlist switcher", g_tabs_panels,
+service_factory_single_t<PreferencesTabsHost> page_playlist_switcher((char*)u8"播放列表切换器", g_tabs_panels,
     tabsize(g_tabs_panels), guid_playlist_switcher_page, g_guid_columns_ui_preferences_page, &cfg_child_panels);
+
 } // namespace preferences
 } // namespace cui

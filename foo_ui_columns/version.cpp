@@ -7,17 +7,19 @@
 
 VALIDATE_COMPONENT_FILENAME("foo_ui_columns.dll");
 
-DECLARE_COMPONENT_VERSION("Columns UI",
+DECLARE_COMPONENT_VERSION((char*)u8"用户分栏界面",
+    
+     cui::version,
 
-    cui::version,
 
-    "Columns UI\n"
+
+    "hhhhhhhhhhh\n"
     "Alternative user interface\n"
     "\n"
     "Copyright (C) 2003-2019 musicmusic and contributors\n"
     "Current version at yuo.be\n"
     "\n"
-    "Built on " CUI_COMPILATION_DATE "\n"
+    "测试 " CUI_COMPILATION_DATE "\n"
     "Columns UI SDK version: " UI_EXTENSION_VERSION
 
 );
