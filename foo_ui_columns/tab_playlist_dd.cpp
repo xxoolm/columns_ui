@@ -77,7 +77,7 @@ public:
         return m_helper.create(wnd, IDD_PREFS_PLAYLISTS_DRAGDROP,
             [this](auto&&... args) { return ConfigProc(std::forward<decltype(args)>(args)...); });
     }
-    const char* get_name() override { return "Drag and drop"; }
+    const char* get_name() override { return (char*)u8"拖放"; }
     bool get_help_url(pfc::string_base& p_out) override
     {
         p_out = "http://yuo.be/wiki/columns_ui:config:playlist_switcher:drag_and_drop";

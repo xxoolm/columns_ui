@@ -8,9 +8,9 @@ public:
     {
         switch (msg) {
         case WM_INITDIALOG: {
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "无");
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "凹陷");
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "灰白");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, (char*)u8"无");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, (char*)u8"凹陷");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, (char*)u8"灰白");
 
             SendDlgItemMessage(wnd, IDC_SPINPL, UDM_SETRANGE32, -100, 100);
 
