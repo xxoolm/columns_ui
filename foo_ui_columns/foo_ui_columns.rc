@@ -639,17 +639,15 @@ STYLE DS_SETFONT | DS_3DLOOK | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
-    LTEXT           "Playlist switcher",IDC_TITLE1,7,4,313,16
-    CONTROL         "Delete a playlist when middle-clicking on it",IDC_MCLICK,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,30,154,10
-    LTEXT           "Vertical item padding",IDC_STATIC,7,50,73,8
+    LTEXT           "播放列表切换器",IDC_TITLE1,7,4,313,16
+    CONTROL         "中键点击删除播放列表",IDC_MCLICK,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,30,102,10
+    LTEXT           "垂直填充项目",IDC_STATIC,7,50,73,8
     EDITTEXT        IDC_PLHEIGHT,7,61,41,12,ES_AUTOHSCROLL | ES_NUMBER
     CONTROL         "Spin1",IDC_SPINPL,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,42,65,11,10
     LTEXT           "px",IDC_STATIC,51,62,9,8
-    LTEXT           "Edge style",IDC_STATIC,7,84,37,8
+    LTEXT           "边框样式",IDC_STATIC,7,84,37,8
     COMBOBOX        IDC_PLISTEDGE,7,95,41,68,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Use title formatting for playlist titles:",IDC_USE_PLAYLIST_TF,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,119,161,10
+    CONTROL         "面板中的播放列表标题使用的标题格式",IDC_USE_PLAYLIST_TF,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,119,161,10
     EDITTEXT        IDC_PLAYLIST_TF,7,131,313,133,ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL
 END
 
