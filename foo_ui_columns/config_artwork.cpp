@@ -75,7 +75,7 @@ public:
         return m_helper.create(wnd, IDD_PREFS_ARTWORK,
             [this](auto&&... args) { return on_message(std::forward<decltype(args)>(args)...); });
     }
-    const char* get_name() override { return "Artwork"; }
+    const char* get_name() override { return (char*)u8"封面"; }
     bool get_help_url(pfc::string_base& p_out) override
     {
         p_out = "http://yuo.be/wiki/columns_ui:config:artwork";
