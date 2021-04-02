@@ -8,9 +8,9 @@ public:
     {
         switch (msg) {
         case WM_INITDIALOG: {
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "None");
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "Sunken");
-            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "Grey");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "无");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "凹陷");
+            uSendDlgItemMessageText(wnd, IDC_PLISTEDGE, CB_ADDSTRING, 0, "灰白");
 
             SendDlgItemMessage(wnd, IDC_SPINPL, UDM_SETRANGE32, -100, 100);
 
@@ -61,7 +61,7 @@ public:
         return m_helper.create(wnd, IDD_PREFS_PLAYLIST_SWITCHER,
             [this](auto&&... args) { return ConfigProc(std::forward<decltype(args)>(args)...); });
     }
-    const char* get_name() override { return (char*)u8"播放列表切换器"; }
+    const char* get_name() override { return (char*)u8"常规"; }
     bool get_help_url(pfc::string_base& p_out) override
     {
         p_out = "http://yuo.be/wiki/columns_ui:config:playlist_switcher:general";

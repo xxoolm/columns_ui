@@ -36,9 +36,9 @@ public:
         switch (msg) {
         case WM_INITDIALOG: {
             m_menu_cache = cui::helpers::get_main_menu_items();
-            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "None");
-            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "Sunken");
-            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "Grey");
+            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "无");
+            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "凹陷");
+            uSendDlgItemMessageText(wnd, IDC_PLEDGE, CB_ADDSTRING, 0, "灰白");
 
             SendDlgItemMessage(wnd, IDC_SPIN1, UDM_SETRANGE32, -100, 100);
             //        SendDlgItemMessage(wnd,IDC_SPINPL,UDM_SETRANGE32,-100,100);

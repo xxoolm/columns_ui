@@ -15,14 +15,14 @@ BOOL CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARA
             modeless_dialog_manager::g_add(wnd);
             m_this->set_config_wnd(wnd);
             ShowWindow(GetDlgItem(wnd, IDOK), SW_HIDE);
-            SetWindowText(GetDlgItem(wnd, IDCANCEL), L"Close");
+            SetWindowText(GetDlgItem(wnd, IDCANCEL), L"取消");
         }
 
         uSetWindowText(GetDlgItem(wnd, IDC_SCRIPT), m_script);
         HWND wnd_combo = GetDlgItem(wnd, IDC_EDGESTYLE);
-        ComboBox_AddString(wnd_combo, L"None");
-        ComboBox_AddString(wnd_combo, L"Sunken");
-        ComboBox_AddString(wnd_combo, L"Grey");
+        ComboBox_AddString(wnd_combo, L"无");
+        ComboBox_AddString(wnd_combo, L"凹陷");
+        ComboBox_AddString(wnd_combo, L"灰白");
         ComboBox_SetCurSel(wnd_combo, m_edge_style);
 
         wnd_combo = GetDlgItem(wnd, IDC_HALIGN);

@@ -287,9 +287,9 @@ static BOOL CALLBACK SpectrumPopupProc(SpectrumAnalyserConfigData& state, HWND w
         EnableWindow(wnd_combo, state.b_show_frame);
 
         if (state.b_show_frame) {
-            ComboBox_AddString(wnd_combo, _T("None"));
-            ComboBox_AddString(wnd_combo, _T("Sunken"));
-            ComboBox_AddString(wnd_combo, _T("Grey"));
+            ComboBox_AddString(wnd_combo, _T("无"));
+            ComboBox_AddString(wnd_combo, _T("凹陷"));
+            ComboBox_AddString(wnd_combo, _T("灰白"));
             ComboBox_SetCurSel(wnd_combo, state.frame);
         }
 

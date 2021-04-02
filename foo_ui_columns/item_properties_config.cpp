@@ -25,9 +25,9 @@ BOOL CALLBACK ItemPropertiesConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LP
         }
 
         HWND wnd_combo = GetDlgItem(wnd, IDC_EDGESTYLE);
-        ComboBox_AddString(wnd_combo, L"None");
-        ComboBox_AddString(wnd_combo, L"Sunken");
-        ComboBox_AddString(wnd_combo, L"Grey");
+        ComboBox_AddString(wnd_combo, L"无");
+        ComboBox_AddString(wnd_combo, L"凹陷");
+        ComboBox_AddString(wnd_combo, L"灰白");
         ComboBox_SetCurSel(wnd_combo, m_edge_style);
 
         Button_SetCheck(GetDlgItem(wnd, IDC_SHOWCOLUMNS), m_show_columns ? BST_CHECKED : BST_UNCHECKED);

@@ -232,7 +232,7 @@ public:
         pfc::vartoggle_t<bool> initialising_toggle(m_initialising, true);
 
         const auto wnd_edge_style = GetDlgItem(wnd, IDC_EDGESTYLE);
-        const auto edge_style_options = {L"None", L"Sunken", L"Grey"};
+        const auto edge_style_options = {L"无", L"凹陷", L"灰白"};
         for (auto&& option : edge_style_options)
             ComboBox_AddString(wnd_edge_style, option);
 
