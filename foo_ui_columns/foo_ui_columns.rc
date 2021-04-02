@@ -59,17 +59,12 @@ STYLE DS_SETFONT | DS_3DLOOK | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
-    LTEXT           "Playlist tabs",IDC_TITLE1,7,4,313,16
-    CONTROL         "Hide when a single playlist is open",IDC_PLAUTOHIDE,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,30,128,10
-    CONTROL         "Use multiple rows when tabs do not fit in one row",IDC_TABS_MULTILINE,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,51,179,10
-    CONTROL         "Rearrange playlists when dragging tabs",IDC_PLDRAG,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,72,145,10
-    CONTROL         "Delete a playlist when middle-clicking on it",IDC_PLAYLIST_TABS_MCLICK,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,93,154,10
-    CONTROL         "Rename a playlist when double-clicking on it",IDC_MCLICK3,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,114,161,10
+    LTEXT           "播放列表标签",IDC_TITLE1,7,4,313,16
+    CONTROL         "仅在打开多个播放列表时显示标签",IDC_PLAUTOHIDE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,30,145,10
+    CONTROL         "多行标签",IDC_TABS_MULTILINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,51,50,10
+    CONTROL         "允许以拖放方式调整播放列表",IDC_PLDRAG,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,72,127,10
+    CONTROL         "中键单击删除播放列表",IDC_PLAYLIST_TABS_MCLICK,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,93,102,10
+    CONTROL         "双击重命名播放列表",IDC_MCLICK3,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,114,93,10
 END
 
 IDD_PREFS_NOTIFICATION_AREA DIALOGEX 0, 0, 327, 271
