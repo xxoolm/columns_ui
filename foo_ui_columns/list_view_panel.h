@@ -1,13 +1,18 @@
 #pragma once
 
+#include "dark_mode.h"
+
 template <typename t_appearance_client, typename t_window = uie::window>
 class ListViewPanelBase
     : public uih::ListView
     , public t_window {
 public:
-    ListViewPanelBase(std::unique_ptr<uih::lv::RendererBase> renderer = std::make_unique<uih::lv::DefaultRenderer>())
+    explicit ListViewPanelBase(
+        std::unique_ptr<uih::lv::RendererBase> renderer = std::make_unique<uih::lv::DefaultRenderer>())
         : ListView(std::move(renderer))
     {
+        set_dark_edit_colours(
+            cui::dark::get_dark_system_colour(COLOR_WINDOWTEXT), cui::dark::get_dark_system_colour(COLOR_WINDOW));
     }
 
     HWND create_or_transfer_window(
@@ -42,7 +47,7 @@ public:
 protected:
     const char* get_drag_unit_plural() const override { return "tracks"; }
     const char* get_drag_unit_singular() const override { return "track"; }
-    bool should_show_drag_text(t_size selection_count) override { return true; }
+    bool should_show_drag_text(size_t selection_count) override { return true; }
     void render_get_colour_data(ColourData& p_out) override
     {
         cui::colours::helper p_helper(t_appearance_client::g_guid);

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "filter.h"
 
 #include "filter_config_var.h"
@@ -13,17 +13,16 @@ const GUID g_guid_filter_header_font_client{
 
 bool FilterStream::is_visible()
 {
-    for (t_size i = 0, count = m_windows.get_count(); i < count; i++)
+    for (size_t i = 0, count = m_windows.get_count(); i < count; i++)
         if (!m_windows[i]->is_visible())
             return false;
     return true;
 }
 
-void FilterPanel::set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void FilterPanel::set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     if (p_size) {
-        t_size version;
-        p_reader->read_lendian_t(version, p_abort);
+        const auto version = p_reader->read_lendian_t<uint32_t>(p_abort);
         if (version <= config_version_current) {
             p_reader->read_string(m_field_data.m_name, p_abort);
             if (version >= 1) {
@@ -39,18 +38,18 @@ void FilterPanel::set_config(stream_reader* p_reader, t_size p_size, abort_callb
 
 void FilterPanel::get_config(stream_writer* p_writer, abort_callback& p_abort) const
 {
-    p_writer->write_lendian_t(t_size(config_version_current), p_abort);
+    p_writer->write_lendian_t(static_cast<uint32_t>(config_version_current), p_abort);
     p_writer->write_string(m_field_data.m_name, p_abort);
     p_writer->write_lendian_t(m_show_search, p_abort);
     p_writer->write_lendian_t(get_sort_direction(), p_abort);
 }
 
-t_size FilterPanel::g_get_stream_index_by_window(const uie::window_ptr& ptr)
+size_t FilterPanel::g_get_stream_index_by_window(const uie::window_ptr& ptr)
 {
-    t_size count = g_streams.get_count();
-    for (t_size i = 0; i < count; i++) {
-        t_size subcount = g_streams[i]->m_windows.get_count();
-        for (t_size j = 0; j < subcount; j++)
+    size_t count = g_streams.get_count();
+    for (size_t i = 0; i < count; i++) {
+        size_t subcount = g_streams[i]->m_windows.get_count();
+        for (size_t j = 0; j < subcount; j++)
             if (g_streams[i]->m_windows[j] == ptr.get_ptr())
                 return i;
     }
@@ -64,8 +63,8 @@ void FilterPanel::g_on_orderedbysplitters_change()
         window->refresh_stream();
     }
     // filter_search_bar::g_on_orderedbysplitters_change();
-    t_size count = g_streams.get_count();
-    for (t_size i = 0; i < count; i++) {
+    size_t count = g_streams.get_count();
+    for (size_t i = 0; i < count; i++) {
         if (g_streams[i]->m_windows.get_count()) {
             FilterSearchToolbar::g_initialise_filter_stream(g_streams[i]);
             pfc::list_t<FilterPanel*> windows;
@@ -80,15 +79,15 @@ void FilterPanel::g_on_fields_change()
 {
     g_load_fields();
     for (auto& window : g_windows) {
-        t_size field_index = window->get_field_index();
+        size_t field_index = window->get_field_index();
         window->set_field(field_index == pfc_infinite ? FieldData() : g_field_data[field_index], true);
     }
 }
 
-t_size FilterPanel::g_get_field_index_by_name(const char* p_name)
+size_t FilterPanel::g_get_field_index_by_name(const char* p_name)
 {
-    t_size count = g_field_data.get_count();
-    for (t_size i = 0; i < count; i++) {
+    size_t count = g_field_data.get_count();
+    for (size_t i = 0; i < count; i++) {
         if (!strcmp(g_field_data[i].m_name, p_name))
             return i;
     }
@@ -97,7 +96,7 @@ t_size FilterPanel::g_get_field_index_by_name(const char* p_name)
 
 void FilterPanel::g_on_field_title_change(const char* p_old, const char* p_new)
 {
-    t_size field_index = g_get_field_index_by_name(p_old);
+    size_t field_index = g_get_field_index_by_name(p_old);
     if (field_index != pfc_infinite) {
         for (auto& window : g_windows) {
             if (window->get_field_index() == field_index) {
@@ -136,17 +135,17 @@ void FilterPanel::g_on_show_sort_indicators_change()
 
 void FilterPanel::g_on_field_query_change(const Field& field)
 {
-    t_size field_index = g_get_field_index_by_name(field.m_name);
+    size_t field_index = g_get_field_index_by_name(field.m_name);
     if (field_index != pfc_infinite) {
         g_create_field_data(field, g_field_data[field_index]);
-        t_size count = g_streams.get_count();
-        for (t_size i = 0; i < count; i++) {
+        size_t count = g_streams.get_count();
+        for (size_t i = 0; i < count; i++) {
             if (g_streams[i]->m_windows.get_count()) {
                 pfc::list_t<FilterPanel*> windows;
                 g_streams[i]->m_windows[0]->get_windows(windows);
-                t_size subcount = windows.get_count();
+                size_t subcount = windows.get_count();
 
-                for (t_size j = 0; j < subcount; j++) {
+                for (size_t j = 0; j < subcount; j++) {
                     if (windows[j]->get_field_index() == field_index) // meh
                     {
                         windows[j]->set_field(g_field_data[field_index], true);
@@ -167,12 +166,12 @@ void FilterPanel::g_on_showemptyitems_change(bool b_val, bool update_filters)
     if (!update_filters)
         return;
 
-    t_size count = g_streams.get_count();
-    for (t_size i = 0; i < count; i++) {
+    size_t count = g_streams.get_count();
+    for (size_t i = 0; i < count; i++) {
         if (g_streams[i]->m_windows.get_count()) {
             pfc::list_t<FilterPanel*> windows;
             g_streams[i]->m_windows[0]->get_windows(windows);
-            t_size j = windows.get_count();
+
             if (windows.get_count())
                 g_update_subsequent_filters(windows, 0, false, false);
         }
@@ -195,7 +194,7 @@ void FilterPanel::s_on_dark_mode_status_change()
 void FilterPanel::g_on_font_items_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_filter_items_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_filter_items_font_client, lf);
     for (auto& window : g_windows) {
         window->set_font(&lf);
     }
@@ -204,7 +203,7 @@ void FilterPanel::g_on_font_items_change()
 void FilterPanel::g_on_font_header_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_filter_header_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_filter_header_font_client, lf);
     for (auto& window : g_windows) {
         window->set_header_font(&lf);
     }
@@ -217,24 +216,24 @@ void FilterPanel::g_redraw_all()
 void FilterPanel::g_on_new_field(const Field& field)
 {
     if (!g_windows.empty()) {
-        t_size index = g_field_data.get_count();
+        size_t index = g_field_data.get_count();
         g_field_data.set_count(index + 1);
         g_create_field_data(field, g_field_data[index]);
     }
 }
-void FilterPanel::g_on_fields_swapped(t_size index_1, t_size index_2)
+void FilterPanel::g_on_fields_swapped(size_t index_1, size_t index_2)
 {
     if (std::max(index_1, index_2) < g_field_data.get_count())
         g_field_data.swap_items(index_1, index_2);
     if (!cfg_orderedbysplitters) {
-        t_size count = g_streams.get_count();
-        for (t_size i = 0; i < count; i++) {
+        size_t count = g_streams.get_count();
+        for (size_t i = 0; i < count; i++) {
             if (g_streams[i]->m_windows.get_count()) {
                 pfc::list_t<FilterPanel*> windows;
                 g_streams[i]->m_windows[0]->get_windows(windows);
-                t_size subcount = windows.get_count();
-                for (t_size j = 0; j < subcount; j++) {
-                    t_size this_index = windows[j]->get_field_index();
+                size_t subcount = windows.get_count();
+                for (size_t j = 0; j < subcount; j++) {
+                    size_t this_index = windows[j]->get_field_index();
                     if (this_index == index_1 || this_index == index_2) {
                         g_update_subsequent_filters(windows, j, false, false);
                         break;
@@ -246,18 +245,18 @@ void FilterPanel::g_on_fields_swapped(t_size index_1, t_size index_2)
         }
     }
 }
-void FilterPanel::g_on_field_removed(t_size index)
+void FilterPanel::g_on_field_removed(size_t index)
 {
-    t_size count = g_streams.get_count();
-    for (t_size i = 0; i < count; i++) {
+    size_t count = g_streams.get_count();
+    for (size_t i = 0; i < count; i++) {
         if (g_streams[i]->m_windows.get_count()) {
             pfc::list_t<FilterPanel*> windows;
             g_streams[i]->m_windows[0]->get_windows(windows);
-            t_size subcount = windows.get_count();
+            size_t subcount = windows.get_count();
             bool b_found = false;
-            t_size index_found = pfc_infinite;
-            for (t_size j = 0; j < subcount; j++) {
-                t_size this_index = windows[j]->get_field_index();
+            size_t index_found = pfc_infinite;
+            for (size_t j = 0; j < subcount; j++) {
+                size_t this_index = windows[j]->get_field_index();
                 if (index == this_index) {
                     windows[j]->set_field(FieldData());
                     if (!b_found) {
@@ -284,11 +283,11 @@ void FilterPanel::refresh(bool b_allow_autosend)
     update_subsequent_filters(b_allow_autosend);
 }
 
-t_size FilterPanel::get_field_index()
+size_t FilterPanel::get_field_index()
 {
-    t_size count = g_field_data.get_count();
-    t_size ret = pfc_infinite;
-    for (t_size i = 0; i < count; i++)
+    size_t count = g_field_data.get_count();
+    size_t ret = pfc_infinite;
+    for (size_t i = 0; i < count; i++)
         if (!stricmp_utf8(g_field_data[i].m_name, m_field_data.m_name)) {
             ret = i;
             break;
@@ -305,26 +304,26 @@ void FilterPanel::get_windows(pfc::list_base_t<FilterPanel*>& windows)
             hostex->get_children(siblings);
         else
             siblings.add_item(this);
-        pfc::list_t<t_size> indices;
-        t_size count = siblings.get_count();
-        for (t_size i = 0; i < count; i++) {
-            t_size index = pfc_infinite;
+        pfc::list_t<size_t> indices;
+        size_t count = siblings.get_count();
+        for (size_t i = 0; i < count; i++) {
+            size_t index = pfc_infinite;
             if ((index = m_stream->m_windows.find_item(static_cast<FilterPanel*>(siblings[i].get_ptr())))
                 != pfc_infinite) // meh
                 windows.add_item(m_stream->m_windows[index]);
         }
     } else {
-        pfc::list_t<t_size> indices;
-        t_size count = m_stream->m_windows.get_count();
-        for (t_size i = 0; i < count; i++) {
-            t_size index = m_stream->m_windows[i]->get_field_index();
+        pfc::list_t<size_t> indices;
+        size_t count = m_stream->m_windows.get_count();
+        for (size_t i = 0; i < count; i++) {
+            size_t index = m_stream->m_windows[i]->get_field_index();
             if (index != pfc_infinite) {
                 indices.add_item(index);
                 windows.add_item(m_stream->m_windows[i]);
             }
         }
         mmh::Permutation permutation(windows.get_count());
-        sort_get_permutation(indices.get_ptr(), permutation, (pfc::compare_t<t_size, t_size>), true, false);
+        sort_get_permutation(indices.get_ptr(), permutation, (pfc::compare_t<size_t, size_t>), true, false);
         windows.reorder(permutation.data());
     }
 }
@@ -365,24 +364,24 @@ void FilterPanel::g_create_field_data(const Field& field, FieldData& p_out)
 
 void FilterPanel::g_load_fields()
 {
-    t_size count = cfg_field_list.get_count();
+    size_t count = cfg_field_list.get_count();
     g_field_data.set_count(count);
-    for (t_size i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         const Field& field = cfg_field_list[i];
         g_create_field_data(field, g_field_data[i]);
     }
 }
-void FilterPanel::g_update_subsequent_filters(const pfc::list_base_const_t<FilterPanel*>& windows, t_size index,
+void FilterPanel::g_update_subsequent_filters(const pfc::list_base_const_t<FilterPanel*>& windows, size_t index,
     bool b_check_needs_update, bool b_update_playlist)
 {
-    t_size count = windows.get_count();
+    size_t count = windows.get_count();
     metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
 
-    for (t_size i = index; i < count; i++) {
+    for (size_t i = index; i < count; i++) {
         handles.remove_all();
         windows[i]->get_initial_handles(handles);
         if (b_check_needs_update) {
-            metadb_handle_list items1(windows[i]->m_nodes[0].m_handles);
+            metadb_handle_list items1(windows[i]->m_nodes[0]->m_handles);
             handles.sort_by_pointer();
             items1.sort_by_pointer();
             if (!pfc::comparator_array<>::compare(items1, handles)) {
@@ -400,7 +399,7 @@ void FilterPanel::update_subsequent_filters(bool b_allow_autosend)
 {
     pfc::ptr_list_t<FilterPanel> windows;
     get_windows(windows);
-    t_size pos = windows.find_item(this);
+    size_t pos = windows.find_item(this);
 
     if (pos != pfc_infinite) {
         g_update_subsequent_filters(windows, pos + 1, false, b_allow_autosend);
@@ -411,14 +410,14 @@ void FilterPanel::get_initial_handles(metadb_handle_list_t<pfc::alloc_fast_aggre
 {
     pfc::ptr_list_t<FilterPanel> windows;
     get_windows(windows);
-    t_size pos = windows.find_item(this);
+    size_t pos = windows.find_item(this);
     if (pos && pos != pfc_infinite) {
         windows[pos - 1]->get_selection_handles(p_out);
     } else {
         if (m_stream->m_source_overriden)
             p_out = m_stream->m_source_handles;
         else
-            static_api_ptr_t<library_manager>()->get_all_items(p_out);
+            library_manager::get()->get_all_items(p_out);
     }
 }
 
@@ -429,7 +428,7 @@ void FilterPanel::set_field(const FieldData& field, bool b_force)
 
         pfc::ptr_list_t<FilterPanel> windows_before;
         get_windows(windows_before);
-        t_size pos_before = windows_before.find_item(this);
+        size_t pos_before = windows_before.find_item(this);
 
         m_field_data = field;
         bool b_redraw = disable_redrawing();
@@ -442,8 +441,8 @@ void FilterPanel::set_field(const FieldData& field, bool b_force)
 
         pfc::ptr_list_t<FilterPanel> windows_after;
         get_windows(windows_after);
-        t_size pos_after = windows_after.find_item(this);
-        t_size pos_update = std::min(pos_before, pos_after);
+        size_t pos_after = windows_after.find_item(this);
+        size_t pos_update = std::min(pos_before, pos_after);
         if (b_redraw)
             enable_redrawing();
         // update_window();
@@ -451,15 +450,15 @@ void FilterPanel::set_field(const FieldData& field, bool b_force)
     }
 }
 
-void FilterPanel::notify_update_item_data(t_size index)
+void FilterPanel::notify_update_item_data(size_t index)
 {
     auto& subitems = get_item_subitems(index);
     subitems.resize(1);
 
-    subitems[0] = pfc::stringcvt::string_utf8_from_wide(m_nodes[index].m_value.c_str());
+    subitems[0] = pfc::stringcvt::string_utf8_from_wide(m_nodes[index]->m_value.c_str());
 }
 
-t_size FilterPanel::get_highlight_item()
+size_t FilterPanel::get_highlight_item()
 {
     return pfc_infinite;
 }
@@ -475,12 +474,12 @@ bool FilterPanel::do_drag_drop(WPARAM wp)
     get_selection_handles(data);
     if (data.get_count() > 0) {
         sort_tracks(data);
-        static_api_ptr_t<playlist_incoming_item_filter> incoming_api;
+        const auto incoming_api = playlist_incoming_item_filter::get();
         auto pDataObject = incoming_api->create_dataobject_ex(data);
         if (pDataObject.is_valid()) {
             m_drag_item_count = data.get_count();
             DWORD blah = DROPEFFECT_NONE;
-            HRESULT hr = uih::ole::do_drag_drop(
+            uih::ole::do_drag_drop(
                 get_wnd(), wp, pDataObject.get_ptr(), DROPEFFECT_COPY | DROPEFFECT_MOVE, DROPEFFECT_COPY, &blah);
             m_drag_item_count = 0;
         }
@@ -499,22 +498,22 @@ void FilterPanel::get_selection_handles(
     metadb_handle_list_t<pfc::alloc_fast_aggressive>& p_out, bool fallback, bool b_sort)
 {
     bool b_found = false;
-    t_size count = m_nodes.get_count();
+    size_t count = m_nodes.get_count();
     if (count)
         p_out.prealloc(count);
-    for (t_size i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         if (get_item_selected(i)) {
             b_found = true;
             if (b_sort)
-                m_nodes[i].ensure_handles_sorted();
-            p_out.add_items(m_nodes[i].m_handles);
+                m_nodes[i]->ensure_handles_sorted();
+            p_out.add_items(m_nodes[i]->m_handles);
         }
     }
     if (!b_found) {
         if (fallback) {
             if (b_sort)
-                m_nodes[0].ensure_handles_sorted();
-            p_out.add_items(m_nodes[0].m_handles);
+                m_nodes[0]->ensure_handles_sorted();
+            p_out.add_items(m_nodes[0]->m_handles);
         }
     } else {
         fbh::metadb_handle_list_remove_duplicates(p_out);
@@ -532,25 +531,25 @@ void FilterPanel::do_items_action(const bit_array& p_nodes, Action action)
 {
     metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
     handles.prealloc(m_nodes.get_count());
-    t_size i;
-    t_size count = m_nodes.get_count();
+    size_t i;
+    size_t count = m_nodes.get_count();
     for (i = 0; i < count; i++)
         if (p_nodes[i])
-            handles.add_items(m_nodes[i].m_handles);
+            handles.add_items(m_nodes[i]->m_handles);
 
     if (!handles.get_count())
         return;
 
     fbh::metadb_handle_list_remove_duplicates(handles);
 
-    static_api_ptr_t<playlist_manager_v3> playlist_api;
-    static_api_ptr_t<play_control> playback_api;
-    t_size index_insert = pfc_infinite;
+    const auto playlist_api = playlist_manager_v3::get();
+    const auto playback_api = play_control::get();
+    size_t index_insert = pfc_infinite;
     if (action == action_send_to_autosend && playback_api->is_playing()) {
-        t_size playlist = playlist_api->get_playing_playlist();
+        size_t playlist = playlist_api->get_playing_playlist();
         pfc::string8 name;
         if (playlist_api->playlist_get_name(playlist, name) && !stricmp_utf8("Filter Results", name)) {
-            t_size index_old = playlist_api->find_playlist("Filter Results (Playback)", pfc_infinite);
+            size_t index_old = playlist_api->find_playlist("Filter Results (Playback)", pfc_infinite);
             playlist_api->playlist_rename(playlist, "Filter Results (Playback)", pfc_infinite);
             index_insert = index_old < playlist ? playlist : playlist + 1;
             if (index_old != pfc_infinite)
@@ -558,7 +557,7 @@ void FilterPanel::do_items_action(const bit_array& p_nodes, Action action)
         }
     }
     pfc::string8 playlist_name;
-    t_size index = NULL;
+    size_t index = NULL;
     if (action == action_add_to_active) {
         index = playlist_api->get_active_playlist();
         playlist_api->playlist_undo_backup(index);
@@ -572,7 +571,7 @@ void FilterPanel::do_items_action(const bit_array& p_nodes, Action action)
                 if (p_nodes[i]) {
                     if (playlist_name.get_length())
                         playlist_name << ", ";
-                    playlist_name << pfc::stringcvt::string_utf8_from_wide(m_nodes[i].m_value.c_str());
+                    playlist_name << pfc::stringcvt::string_utf8_from_wide(m_nodes[i]->m_value.c_str());
                 }
             }
         }
@@ -605,13 +604,13 @@ void FilterPanel::do_items_action(const bit_array& p_nodes, Action action)
     }
 }
 
-void FilterPanel::execute_default_action(t_size index, t_size column, bool b_keyboard, bool b_ctrl)
+void FilterPanel::execute_default_action(size_t index, size_t column, bool b_keyboard, bool b_ctrl)
 {
     auto action = static_cast<Action>(cfg_doubleclickaction.get_value());
     do_selection_action(action);
 }
 
-bool FilterPanel::notify_on_middleclick(bool on_item, t_size index)
+bool FilterPanel::notify_on_middleclick(bool on_item, size_t index)
 {
     if (cfg_middleclickaction && on_item && index < m_nodes.get_count()) {
         auto action = static_cast<Action>(cfg_middleclickaction.get_value() - 1);
@@ -626,22 +625,22 @@ void FilterPanel::send_results_to_playlist(bool b_play)
     metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
     handles.prealloc(m_nodes.get_count());
     get_selection_handles(handles);
-    static_api_ptr_t<playlist_manager> playlist_api;
-    static_api_ptr_t<play_control> playback_api;
-    t_size index_insert = pfc_infinite;
+    const auto playlist_api = playlist_manager::get();
+    const auto playback_api = play_control::get();
+    size_t index_insert = pfc_infinite;
     if (!b_play && playback_api->is_playing()) {
-        t_size playlist = playlist_api->get_playing_playlist();
+        size_t playlist = playlist_api->get_playing_playlist();
         pfc::string8 name;
         if (playlist_api->playlist_get_name(playlist, name) && !stricmp_utf8("Filter Results", name)) {
-            t_size index_old = playlist_api->find_playlist("Filter Results (Playback)", pfc_infinite);
+            size_t index_old = playlist_api->find_playlist("Filter Results (Playback)", pfc_infinite);
             playlist_api->playlist_rename(playlist, "Filter Results (Playback)", pfc_infinite);
             index_insert = index_old < playlist ? playlist : playlist + 1;
             if (index_old != pfc_infinite)
                 playlist_api->remove_playlist(index_old);
         }
     }
-    // t_size index_remove = playlist_api->find_playlist("Filter Results", pfc_infinite);
-    t_size index = NULL;
+    // size_t index_remove = playlist_api->find_playlist("Filter Results", pfc_infinite);
+    size_t index = NULL;
     if (index_insert != pfc_infinite)
         index = playlist_api->create_playlist(
             b_play ? "Filter Results (Playback)" : "Filter Results", pfc_infinite, index_insert);
@@ -673,7 +672,7 @@ void FilterPanel::notify_on_selection_change(
 }
 void FilterPanel::update_first_node_text(bool b_update)
 {
-    t_size nodes_count = m_nodes.get_count();
+    size_t nodes_count = m_nodes.get_count();
     if (nodes_count) {
         nodes_count -= 1;
         pfc::string8 temp;
@@ -684,7 +683,7 @@ void FilterPanel::update_first_node_text(bool b_update)
                 temp << "s";
             temp << ")";
         }
-        m_nodes[0].m_value = pfc::stringcvt::string_wide_from_utf8(temp).get_ptr();
+        m_nodes[0]->m_value = pfc::stringcvt::string_wide_from_utf8(temp).get_ptr();
         if (b_update)
             update_items(0, 1);
     }
@@ -692,7 +691,7 @@ void FilterPanel::update_first_node_text(bool b_update)
 
 void FilterPanel::notify_on_set_focus(HWND wnd_lost)
 {
-    m_selection_holder = static_api_ptr_t<ui_selection_manager>()->acquire();
+    m_selection_holder = ui_selection_manager::get()->acquire();
     metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
     get_selection_handles(handles, false, true);
     m_selection_holder->set_selection(handles);
@@ -728,27 +727,27 @@ void Node::remove_handles(metadb_handle_list_cref to_remove)
     m_handles.remove_mask(remove_mask.get_ptr());
 }
 
-int Node::g_compare(const Node& i1, const WCHAR* i2)
+int Node::g_compare(const Node::Ptr& i1, const WCHAR* i2)
 {
-    return StrCmpLogicalW(i1.m_value.c_str(), i2);
+    return StrCmpLogicalW(i1->m_value.c_str(), i2);
 }
 
-int Node::g_compare_ptr_with_node(const Node& i1, const Node& i2)
+int Node::g_compare_ptr_with_node(const Node::Ptr& i1, const Node::Ptr& i2)
 {
-    return StrCmpLogicalW(i1.m_value.c_str(), i2.m_value.c_str());
+    return StrCmpLogicalW(i1->m_value.c_str(), i2->m_value.c_str());
 }
 
 void FilterPanel::refresh_stream()
 {
     m_stream.reset();
     if (cfg_orderedbysplitters) {
-        t_size stream_index = pfc_infinite;
+        size_t stream_index = pfc_infinite;
         uie::window_host_ex::ptr hostex;
         if (get_host()->service_query_t(hostex)) {
             pfc::list_t<uie::window_ptr> siblings;
             hostex->get_children(siblings);
-            t_size count = siblings.get_count();
-            for (t_size i = 0; i < count; i++) {
+            size_t count = siblings.get_count();
+            for (size_t i = 0; i < count; i++) {
                 if ((stream_index = g_get_stream_index_by_window(siblings[i])) != pfc_infinite)
                     break;
             }
@@ -794,12 +793,12 @@ void FilterPanel::notify_on_initialisation()
     set_show_sort_indicators(cfg_show_sort_indicators);
 
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_filter_items_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_filter_items_font_client, lf);
     set_font(&lf);
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_filter_header_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_filter_header_font_client, lf);
     set_header_font(&lf);
 
-    t_size index = g_windows.size();
+    size_t index = g_windows.size();
     if (index == 0) {
         g_showemptyitems = cfg_showemptyitems;
         g_load_fields();
@@ -807,26 +806,26 @@ void FilterPanel::notify_on_initialisation()
 
     refresh_stream();
 
-    t_size field_index = get_field_index();
+    size_t field_index = get_field_index();
     if (field_index == pfc_infinite)
     // if (m_field_data.is_empty())
     {
         m_pending_sort_direction = false;
 
         pfc::array_t<bool> used;
-        t_size field_count = g_field_data.get_count();
+        size_t field_count = g_field_data.get_count();
         used.set_count(field_count);
         used.fill_null();
         {
-            t_size count = m_stream->m_windows.get_count();
-            for (t_size i = 0; i < count; i++) {
-                t_size field_index = m_stream->m_windows[i]->get_field_index();
+            size_t count = m_stream->m_windows.get_count();
+            for (size_t i = 0; i < count; i++) {
+                size_t field_index = m_stream->m_windows[i]->get_field_index();
                 if (field_index != pfc_infinite)
                     used[field_index] = true;
             }
         }
         {
-            for (t_size i = 0; i < field_count; i++) {
+            for (size_t i = 0; i < field_count; i++) {
                 if (!used[i]) {
                     m_field_data = g_field_data[i];
                     field_index = i;
@@ -847,15 +846,20 @@ void FilterPanel::notify_on_create()
     refresh_columns();
     refresh_groups();
 
+    auto library_v4 = library_manager_v4::tryGet();
+    auto is_library_initialised = !library_v4.is_valid() || library_v4->is_initialized();
+
     pfc::hires_timer timer0;
     timer0.start();
     metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
     get_initial_handles(handles);
     populate_list(handles);
     double time = timer0.query();
-    console::formatter formatter;
-    formatter << "Filter Panel - " << m_field_data.m_name << ": initialised in " << pfc::format_float(time, 0, 3)
-              << " s";
+
+    if (is_library_initialised && handles.size() > 0)
+        console::print(fmt::format("Filter panel - {}: initialised in {} s", m_field_data.m_name.c_str(),
+            pfc::format_float(time, 0, 3).c_str())
+                           .c_str());
 
     g_windows.push_back(this);
     fbh::library_callback_manager::register_callback(this);
@@ -939,12 +943,12 @@ public:
 FilterItemFontClient::factory<FilterItemFontClient> g_font_client_filter;
 FilterHeaderFontClient::factory<FilterHeaderFontClient> g_font_header_client_filter;
 
-void AppearanceClient::on_colour_changed(t_size mask) const
+void AppearanceClient::on_colour_changed(uint32_t mask) const
 {
     FilterPanel::g_redraw_all();
 }
 
-void AppearanceClient::on_bool_changed(t_size mask) const
+void AppearanceClient::on_bool_changed(uint32_t mask) const
 {
     if (mask & colours::bool_flag_dark_mode_enabled)
         FilterPanel::s_on_dark_mode_status_change();

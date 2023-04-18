@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "playlist_switcher_v2.h"
 
 namespace cui::panels::playlist_switcher {
@@ -11,13 +11,13 @@ bool PlaylistSwitcher::do_drag_drop(WPARAM wp)
     playlist_dataobject_desc_impl data;
     data.set_from_playlist_manager(mask);
 
-    pfc::com_ptr_t<IDataObject> pDataObject = static_api_ptr_t<ole_interaction_v2>()->create_dataobject(data);
+    pfc::com_ptr_t<IDataObject> pDataObject = ole_interaction_v2::get()->create_dataobject(data);
 
     if (pDataObject.is_valid()) {
         DWORD blah = DROPEFFECT_NONE;
         m_dragging = true;
         m_DataObject = pDataObject.get_ptr();
-        HRESULT hr = uih::ole::do_drag_drop(
+        uih::ole::do_drag_drop(
             get_wnd(), wp, pDataObject.get_ptr(), DROPEFFECT_COPY | DROPEFFECT_MOVE, DROPEFFECT_COPY, &blah);
         m_DataObject.reset();
         m_dragging = false;

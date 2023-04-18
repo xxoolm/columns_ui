@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "layout.h"
 
 namespace cui::default_presets {
@@ -205,9 +205,7 @@ ConfigLayout::Preset preset_to_config_preset(Preset preset)
 
 } // namespace cui::default_presets
 
-ConfigLayout::ConfigLayout(const GUID& p_guid)
-    : cfg_var(p_guid)
-    , m_active(0) //, m_initialised(false)
+ConfigLayout::ConfigLayout(const GUID& p_guid) : cfg_var(p_guid), m_active(0) //, m_initialised(false)
 {
 }
 
@@ -215,7 +213,7 @@ void ConfigLayout::Preset::write(stream_writer* out, abort_callback& p_abort)
 {
     out->write_lendian_t(m_guid, p_abort);
     out->write_string(m_name.get_ptr(), p_abort);
-    out->write_lendian_t(m_val.get_size(), p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(m_val.get_size()), p_abort);
     out->write(m_val.get_ptr(), m_val.get_size(), p_abort);
 }
 void ConfigLayout::Preset::read(stream_reader* stream, abort_callback& p_abort)
@@ -243,7 +241,7 @@ void ConfigLayout::Preset::set(const uie::splitter_item_t* item)
     item->get_panel_config_to_array(m_val, true);
 }
 
-void ConfigLayout::get_preset(t_size index, uie::splitter_item_ptr& p_out)
+void ConfigLayout::get_preset(size_t index, uie::splitter_item_ptr& p_out)
 {
     if (index == m_active && g_layout_window.get_wnd()) {
         g_layout_window.get_child(p_out);
@@ -252,7 +250,7 @@ void ConfigLayout::get_preset(t_size index, uie::splitter_item_ptr& p_out)
     }
 }
 
-void ConfigLayout::set_preset(t_size index, const uie::splitter_item_t* item)
+void ConfigLayout::set_preset(size_t index, const uie::splitter_item_t* item)
 {
     if (index == m_active && g_layout_window.get_wnd()) {
         g_layout_window.set_child(item);
@@ -262,11 +260,11 @@ void ConfigLayout::set_preset(t_size index, const uie::splitter_item_t* item)
     }
 }
 
-t_size ConfigLayout::add_preset(const Preset& item)
+size_t ConfigLayout::add_preset(const Preset& item)
 {
     return m_presets.add_item(item);
 }
-t_size ConfigLayout::add_preset(const char* p_name, t_size len)
+size_t ConfigLayout::add_preset(const char* p_name, size_t len)
 {
     Preset temp;
     temp.m_name.set_string(p_name, len);
@@ -282,7 +280,7 @@ void ConfigLayout::save_active_preset()
     }
 }
 
-void ConfigLayout::set_active_preset(t_size index)
+void ConfigLayout::set_active_preset(size_t index)
 {
     if (index < m_presets.get_count() && m_active != index) {
         m_active = index;
@@ -293,7 +291,7 @@ void ConfigLayout::set_active_preset(t_size index)
     }
 }
 
-t_size ConfigLayout::delete_preset(t_size index)
+size_t ConfigLayout::delete_preset(size_t index)
 {
     if (index < m_presets.get_count()) {
         if (index == m_active)
@@ -305,7 +303,7 @@ t_size ConfigLayout::delete_preset(t_size index)
     return m_presets.get_count();
 }
 
-void ConfigLayout::set_presets(const pfc::list_base_const_t<Preset>& presets, t_size active)
+void ConfigLayout::set_presets(const pfc::list_base_const_t<Preset>& presets, size_t active)
 {
     if (presets.get_count()) {
         m_presets.remove_all();
@@ -336,13 +334,13 @@ void ConfigLayout::reset_presets()
     }
 }
 
-void ConfigLayout::get_preset_name(t_size index, pfc::string_base& p_out)
+void ConfigLayout::get_preset_name(size_t index, pfc::string_base& p_out)
 {
     if (index < m_presets.get_count()) {
         p_out = m_presets[index].m_name;
     }
 }
-void ConfigLayout::set_preset_name(t_size index, const char* ptr, t_size len)
+void ConfigLayout::set_preset_name(size_t index, const char* ptr, size_t len)
 {
     if (index < m_presets.get_count()) {
         m_presets[index].m_name.set_string(ptr, len);
@@ -356,9 +354,9 @@ const pfc::list_base_const_t<ConfigLayout::Preset>& ConfigLayout::get_presets() 
 
 void ConfigLayout::get_data_raw(stream_writer* out, abort_callback& p_abort)
 {
-    out->write_lendian_t(t_uint32(stream_version_current), p_abort);
-    out->write_lendian_t(m_active, p_abort);
-    unsigned count = m_presets.get_count();
+    out->write_lendian_t(uint32_t(stream_version_current), p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(m_active), p_abort);
+    const auto count = gsl::narrow<uint32_t>(m_presets.get_count());
     out->write_lendian_t(count, p_abort);
     for (unsigned n = 0; n < count; n++) {
         if (n != m_active || !g_layout_window.get_wnd())
@@ -370,20 +368,20 @@ void ConfigLayout::get_data_raw(stream_writer* out, abort_callback& p_abort)
             stream_writer_memblock conf;
             item->get_panel_config(&conf);
             out->write_string(m_presets[n].m_name.get_ptr(), p_abort);
-            out->write_lendian_t(conf.m_data.get_size(), p_abort);
+            out->write_lendian_t(gsl::narrow<uint32_t>(conf.m_data.get_size()), p_abort);
             out->write(conf.m_data.get_ptr(), conf.m_data.get_size(), p_abort);
         }
     }
 }
 
-void ConfigLayout::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort)
+void ConfigLayout::set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort)
 {
-    t_uint32 version;
+    uint32_t version;
     p_reader->read_lendian_t(version, p_abort);
     if (version <= stream_version_current) {
         m_presets.remove_all();
-        p_reader->read_lendian_t(m_active, p_abort);
-        unsigned count;
+        m_active = p_reader->read_lendian_t<uint32_t>(p_abort);
+        uint32_t count;
         p_reader->read_lendian_t(count, p_abort);
         for (unsigned n = 0; n < count; n++) {
             Preset temp;

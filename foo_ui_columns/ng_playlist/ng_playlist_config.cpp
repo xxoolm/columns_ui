@@ -1,5 +1,6 @@
-#include "../stdafx.h"
+#include "pch.h"
 
+#include "dark_mode_dialog.h"
 #include "ng_playlist.h"
 #include "ng_playlist_groups.h"
 
@@ -8,12 +9,11 @@ namespace cui::panels::playlist_view {
 // CONFIG
 
 struct edit_view_param {
-    unsigned idx{};
     Group value;
     bool b_new{};
 };
 
-static BOOL CALLBACK EditViewProc(edit_view_param& state, HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+static INT_PTR CALLBACK EditViewProc(edit_view_param& state, HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -25,7 +25,7 @@ static BOOL CALLBACK EditViewProc(edit_view_param& state, HWND wnd, UINT msg, WP
 
         EnableWindow(GetDlgItem(wnd, IDC_PLAYLIST_FILTER_STRING), state.value.filter_type != FILTER_NONE);
 
-        SendDlgItemMessage(wnd, IDC_PLAYLIST_FILTER_TYPE, CB_SETCURSEL, (t_size)state.value.filter_type, 0);
+        SendDlgItemMessage(wnd, IDC_PLAYLIST_FILTER_TYPE, CB_SETCURSEL, (size_t)state.value.filter_type, 0);
         uSendDlgItemMessageText(wnd, IDC_PLAYLIST_FILTER_STRING, WM_SETTEXT, 0, state.value.filter_playlists);
 
         uSetDlgItemText(wnd, IDC_VALUE, state.value.string);
@@ -45,7 +45,7 @@ static BOOL CALLBACK EditViewProc(edit_view_param& state, HWND wnd, UINT msg, WP
             uGetDlgItemText(wnd, IDC_VALUE, state.value.string);
             state.value.filter_type
                 = ((PlaylistFilterType)SendDlgItemMessage(wnd, IDC_PLAYLIST_FILTER_TYPE, CB_GETCURSEL, 0, 0));
-            state.value.filter_playlists = (string_utf8_from_window(wnd, IDC_PLAYLIST_FILTER_STRING));
+            state.value.filter_playlists = (uGetDlgItemText(wnd, IDC_PLAYLIST_FILTER_STRING));
             EndDialog(wnd, 1);
 
         } break;
@@ -57,7 +57,10 @@ static BOOL CALLBACK EditViewProc(edit_view_param& state, HWND wnd, UINT msg, WP
 
 static bool run_edit_view(edit_view_param& param, HWND parent)
 {
-    const auto dialog_result = uih::modal_dialog_box(IDD_EDIT_GROUP, parent,
+    dark::DialogDarkModeConfig dark_mode_config{.button_ids = {IDOK, IDCANCEL},
+        .combo_box_ids = {IDC_PLAYLIST_FILTER_TYPE},
+        .edit_ids = {IDC_VALUE, IDC_PLAYLIST_FILTER_STRING}};
+    const auto dialog_result = modal_dialog_box(IDD_EDIT_GROUP, dark_mode_config, parent,
         [&param](auto&&... args) { return EditViewProc(param, std::forward<decltype(args)>(args)...); });
 
     return dialog_result > 0;
@@ -66,46 +69,29 @@ static bool run_edit_view(edit_view_param& param, HWND parent)
 BOOL GroupsPreferencesTab::ConfigProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
-    case WM_INITDIALOG:
+    case WM_INITDIALOG: {
+        m_wnd = wnd;
+        m_groups_list_view.create(wnd, {7, 51, 313, 195}, true);
 
-    {
-        HWND list = uGetDlgItem(wnd, IDC_GROUPS);
+        LOGFONT font{};
+        GetObject(GetWindowFont(wnd), sizeof(font), &font);
+        m_groups_list_view.set_font(&font);
 
-        ListView_SetExtendedListViewStyleEx(list, LVS_EX_FULLROWSELECT, LVS_EX_FULLROWSELECT);
-        uih::list_view_set_explorer_theme(list);
+        std::vector<uih::ListView::InsertItem> insert_items;
+        insert_items.reserve(g_groups.get_groups().get_count());
 
-        RECT rc{};
-        GetClientRect(list, &rc);
+        auto& groups = g_groups.get_groups();
+        std::transform(groups.begin(), groups.end(), std::back_inserter(insert_items), [](const auto& group) {
+            return uih::ListView::InsertItem{{group.string}, {}};
+        });
+
+        m_groups_list_view.insert_items(0, insert_items.size(), insert_items.data());
+        ShowWindow(m_groups_list_view.get_wnd(), SW_SHOWNORMAL);
+
         Button_SetCheck(GetDlgItem(wnd, IDC_GROUPING), cfg_grouping ? BST_CHECKED : BST_UNCHECKED);
-        uih::list_view_insert_column_text(list, 0, _T("Script"), rc.right - rc.left);
 
-        unsigned m = g_groups.get_groups().get_count();
-        pfc::string8_fastalloc temp;
-        for (unsigned n = 0; n < m; n++) {
-            uih::list_view_insert_item_text(list, n, 0, g_groups.get_groups()[n].string.get_ptr());
-        }
+        break;
     }
-    // initialised=true;
-
-    break;
-    case WM_NOTIFY: {
-        auto lpnm = (LPNMHDR)lp;
-        if (lpnm->idFrom == IDC_GROUPS) {
-            if (lpnm->code == NM_DBLCLK) {
-                auto lpnmia = (LPNMITEMACTIVATE)lp;
-                if (lpnmia->iItem != -1 && (t_size)lpnmia->iItem < g_groups.get_groups().get_count()) {
-                    edit_view_param p;
-                    p.b_new = false;
-                    p.idx = lpnmia->iItem;
-                    p.value = g_groups.get_groups()[lpnmia->iItem];
-                    if (run_edit_view(p, wnd)) {
-                        g_groups.replace_group(lpnmia->iItem, p.value);
-                        uih::list_view_insert_item_text(lpnm->hwndFrom, lpnmia->iItem, 0, p.value.string, true);
-                    }
-                }
-            }
-        }
-    } break;
     case WM_COMMAND:
         switch (wp) {
         case IDC_GROUPING: {
@@ -113,55 +99,85 @@ BOOL GroupsPreferencesTab::ConfigProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             PlaylistView::g_on_groups_change();
         } break;
         case IDC_GROUP_UP: {
-            HWND list = uGetDlgItem(wnd, IDC_GROUPS);
-            unsigned idx = ListView_GetNextItem(list, -1, LVNI_SELECTED);
-            if (idx != LB_ERR && idx > 0) {
-                g_groups.swap(idx, idx - 1);
-                uih::list_view_insert_item_text(list, idx, 0, g_groups.get_groups()[idx].string.get_ptr(), true);
-                uih::list_view_insert_item_text(
-                    list, idx - 1, 0, g_groups.get_groups()[idx - 1].string.get_ptr(), true);
-                ListView_SetItemState(list, idx - 1, LVIS_SELECTED, LVIS_SELECTED);
-            }
-        } break;
+            const auto index = m_groups_list_view.get_selected_item_single();
+            auto& groups = g_groups.get_groups();
+
+            if (index == 0 || index >= groups.size())
+                break;
+
+            g_groups.swap(index, index - 1);
+
+            const std::vector<uih::ListView::InsertItem> insert_items{
+                {{groups[index - 1].string}, {}}, {{groups[index].string}, {}}};
+            m_groups_list_view.replace_items(index - 1, insert_items.size(), insert_items.data());
+            m_groups_list_view.set_item_selected_single(index - 1);
+            m_groups_list_view.ensure_visible(index - 1);
+            break;
+        }
         case IDC_GROUP_DOWN: {
-            HWND list = uGetDlgItem(wnd, IDC_GROUPS);
-            unsigned idx = ListView_GetNextItem(list, -1, LVNI_SELECTED);
-            if (idx != LB_ERR && idx + 1 < g_groups.get_groups().get_count()) {
-                g_groups.swap(idx, idx + 1);
-                uih::list_view_insert_item_text(list, idx, 0, g_groups.get_groups()[idx].string.get_ptr(), true);
-                uih::list_view_insert_item_text(
-                    list, idx + 1, 0, g_groups.get_groups()[idx + 1].string.get_ptr(), true);
-                ListView_SetItemState(list, idx + 1, LVIS_SELECTED, LVIS_SELECTED);
-            }
-        } break;
+            const auto index = m_groups_list_view.get_selected_item_single();
+            auto& groups = g_groups.get_groups();
+
+            if (index == std::numeric_limits<size_t>::max() || index + 1 >= groups.size())
+                break;
+
+            g_groups.swap(index, index + 1);
+
+            const std::vector<uih::ListView::InsertItem> insert_items{
+                {{groups[index].string}, {}}, {{groups[index + 1].string}, {}}};
+            m_groups_list_view.replace_items(index, insert_items.size(), insert_items.data());
+            m_groups_list_view.set_item_selected_single(index + 1);
+            m_groups_list_view.ensure_visible(index + 1);
+            break;
+        }
         case IDC_GROUP_DELETE: {
-            HWND list = uGetDlgItem(wnd, IDC_GROUPS);
-            unsigned idx = ListView_GetNextItem(list, -1, LVNI_SELECTED);
-            if (idx != -1) {
-                g_groups.remove_group(idx);
-                ListView_DeleteItem(list, idx);
-                if (idx && ListView_GetNextItem(list, -1, LVNI_SELECTED) == -1)
-                    ListView_SetItemState(list, idx - 1, LVIS_SELECTED, LVIS_SELECTED);
+            const auto index = m_groups_list_view.get_selected_item_single();
+            auto& groups = g_groups.get_groups();
+
+            if (index >= groups.size())
+                break;
+
+            g_groups.remove_group(index);
+            m_groups_list_view.remove_item(index);
+
+            if (index > 0 && index == groups.size()) {
+                m_groups_list_view.set_item_selected_single(index - 1);
+            } else if (groups.size() > 0) {
+                m_groups_list_view.set_item_selected_single(index);
             }
-        } break;
+            break;
+        }
         case IDC_GROUP_NEW: {
             edit_view_param p;
             p.b_new = true;
-            p.idx = -1;
             if (run_edit_view(p, wnd)) {
-                HWND list = uGetDlgItem(wnd, IDC_GROUPS);
-                unsigned n = g_groups.add_group(Group(p.value));
-                uih::list_view_insert_item_text(list, n, 0, p.value.string.get_ptr());
-                ListView_SetItemState(list, n, LVIS_SELECTED, LVIS_SELECTED);
+                const auto n = g_groups.add_group(Group(p.value));
+                const std::vector<uih::ListView::InsertItem> insert_items{{{p.value.string}, {}}};
+                m_groups_list_view.insert_items(n, 1, insert_items.data());
+                m_groups_list_view.set_item_selected_single(n);
+                m_groups_list_view.ensure_visible(n);
             }
         } break;
         }
         break;
     case WM_DESTROY:
-        // initialised=false;
+        m_groups_list_view.destroy();
+        m_wnd = nullptr;
         break;
     }
     return 0;
+}
+
+void GroupsPreferencesTab::on_group_default_action(size_t index)
+{
+    edit_view_param p;
+    p.b_new = false;
+    p.value = g_groups.get_groups()[index];
+    if (run_edit_view(p, m_wnd)) {
+        g_groups.replace_group(index, p.value);
+        const std::vector<uih::ListView::InsertItem> insert_items{{{p.value.string}, {}}};
+        m_groups_list_view.replace_items(index, 1, insert_items.data());
+    }
 }
 
 } // namespace cui::panels::playlist_view

@@ -1,10 +1,25 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "item_details.h"
 #include "config.h"
+#include "dark_mode_dialog.h"
 
 namespace cui::panels::item_details {
 
-BOOL CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+namespace {
+
+std::string format_font_code(const LOGFONT& lf)
+{
+    const auto dpi = uih::get_system_dpi_cached().cy;
+    const auto pt = -MulDiv(lf.lfHeight, 72, dpi);
+    const auto face = pfc::stringcvt::string_utf8_from_wide(lf.lfFaceName, std::size(lf.lfFaceName));
+
+    return fmt::format("$set_font({},{},{}{})", face.get_ptr(), pt, lf.lfWeight == FW_BOLD ? "bold;"sv : ""sv,
+        lf.lfItalic ? "italic;"sv : ""sv);
+}
+
+} // namespace
+
+INT_PTR CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
         /*case DM_GETDEFID:
@@ -39,9 +54,8 @@ BOOL CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARA
         ComboBox_AddString(wnd_combo, L"Bottom");
         ComboBox_SetCurSel(wnd_combo, m_vertical_alignment);
 
-        LOGFONT lf;
-        static_api_ptr_t<fonts::manager>()->get_font(g_guid_item_details_font_client, lf);
-        m_font_code_generator.initialise(lf, wnd, IDC_FONT_CODE);
+        fb2k::std_api_get<fonts::manager>()->get_font(g_guid_item_details_font_client, m_code_generator_selected_font);
+        uSetDlgItemText(wnd, IDC_FONT_CODE, format_font_code(m_code_generator_selected_font).c_str());
 
         colour_code_gen(wnd, IDC_COLOUR_CODE, false, true);
 
@@ -65,16 +79,6 @@ BOOL CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARA
             modeless_dialog_manager::g_remove(wnd);
         }
         break;
-    case WM_ERASEBKGND:
-        SetWindowLongPtr(wnd, DWLP_MSGRESULT, TRUE);
-        return TRUE;
-    case WM_PAINT:
-        uih::handle_modern_background_paint(wnd, GetDlgItem(wnd, IDOK));
-        return TRUE;
-    case WM_CTLCOLORSTATIC:
-        SetBkColor((HDC)wp, GetSysColor(COLOR_WINDOW));
-        SetTextColor((HDC)wp, GetSysColor(COLOR_WINDOWTEXT));
-        return (BOOL)GetSysColorBrush(COLOR_WINDOW);
     case WM_CLOSE:
         if (m_modal) {
             SendMessage(wnd, WM_COMMAND, IDCANCEL, NULL);
@@ -102,12 +106,16 @@ BOOL CALLBACK ItemDetailsConfig::on_message(HWND wnd, UINT msg, WPARAM wp, LPARA
             colour_code_gen(wnd, IDC_COLOUR_CODE, false, false);
             break;
         case IDC_GEN_FONT:
-            m_font_code_generator.run(wnd, IDC_FONT_CODE);
+            if (const auto font_description = fonts::select_font(wnd, m_code_generator_selected_font);
+                font_description) {
+                m_code_generator_selected_font = font_description->log_font;
+                uSetDlgItemText(wnd, IDC_FONT_CODE, format_font_code(m_code_generator_selected_font).c_str());
+            }
             break;
         case IDC_SCRIPT:
             switch (HIWORD(wp)) {
             case EN_CHANGE:
-                m_script = string_utf8_from_window(HWND(lp));
+                m_script = uGetWindowText(HWND(lp));
                 if (!m_modal)
                     start_timer();
                 break;
@@ -178,9 +186,13 @@ void ItemDetailsConfig::run_modeless(HWND wnd, ItemDetails* p_this) &&
 {
     m_modal = false;
     m_this = p_this;
-    uih::modeless_dialog_box(IDD_ITEM_DETAILS_OPTIONS, wnd, [config{std::move(*this)}](auto&&... args) mutable {
-        return config.on_message(std::forward<decltype(args)>(args)...);
-    });
+    dark::DialogDarkModeConfig dark_mode_config{.button_ids = {IDC_GEN_COLOUR, IDC_GEN_FONT, IDOK, IDCANCEL},
+        .combo_box_ids = {IDC_HALIGN, IDC_VALIGN, IDC_EDGESTYLE},
+        .edit_ids = {IDC_SCRIPT, IDC_COLOUR_CODE, IDC_FONT_CODE}};
+    modeless_dialog_box(
+        IDD_ITEM_DETAILS_OPTIONS, dark_mode_config, wnd, [config{std::move(*this)}](auto&&... args) mutable {
+            return config.on_message(std::forward<decltype(args)>(args)...);
+        });
 }
 
 bool ItemDetailsConfig::run_modal(HWND wnd)

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "buttons.h"
 
 namespace cui::toolbars::buttons {
@@ -11,8 +11,9 @@ CLIPFORMAT ButtonsToolbar::ConfigParam::ButtonsList::g_clipformat()
 
 void ButtonsToolbar::ConfigParam::ButtonsList::notify_on_initialisation()
 {
-    set_single_selection(true);
-    set_columns({{"Name", 300}, {"Type", 150}});
+    CoreDarkListView::notify_on_initialisation();
+    set_selection_mode(SelectionMode::SingleRelaxed);
+    set_columns({{"Name", 225_spx}, {"Type", 150_spx}});
 }
 void ButtonsToolbar::ConfigParam::ButtonsList::notify_on_create()
 {
@@ -26,7 +27,7 @@ void ButtonsToolbar::ConfigParam::ButtonsList::notify_on_destroy()
 void ButtonsToolbar::ConfigParam::ButtonsList::notify_on_selection_change(
     const bit_array& p_affected, const bit_array& p_status, notification_source_t p_notification_source)
 {
-    t_size index = get_selected_item_single();
+    size_t index = get_selected_item_single();
     m_param.on_selection_change(index);
 }
 

@@ -1,11 +1,11 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "buttons.h"
 
 namespace cui::toolbars::buttons {
 
 void ButtonsToolbar::Button::ButtonStateCallback::on_button_state_change(unsigned p_new_state) // see t_button_state
 {
-    unsigned state = SendMessage(m_this->wnd_toolbar, TB_GETSTATE, id, 0);
+    auto state = LOWORD(SendMessage(m_this->wnd_toolbar, TB_GETSTATE, id, 0));
     if (p_new_state & uie::BUTTON_STATE_ENABLED)
         state |= TBSTATE_ENABLED;
     else
@@ -27,7 +27,7 @@ void ButtonsToolbar::Button::ButtonStateCallback::set_wnd(ButtonsToolbar* p_sour
 {
     m_this = p_source;
 }
-void ButtonsToolbar::Button::ButtonStateCallback::set_id(const unsigned i)
+void ButtonsToolbar::Button::ButtonStateCallback::set_id(const int i)
 {
     id = i;
 }
@@ -76,7 +76,7 @@ void ButtonsToolbar::Button::read(ConfigVersion p_version, stream_reader* reader
     reader->read_lendian_t(m_type, p_abort);
     reader->read_lendian_t(m_filter, p_abort);
     reader->read_lendian_t((GUID&)m_guid, p_abort);
-    if (p_version >= VERSION_2)
+    if (p_version >= ConfigVersion::VERSION_2)
         reader->read_lendian_t((GUID&)m_subcommand, p_abort);
     reader->read_lendian_t(m_show, p_abort);
     reader->read_lendian_t(m_use_custom, p_abort);
@@ -128,7 +128,7 @@ std::string ButtonsToolbar::Button::get_name(bool short_form) const
         return temp.c_str();
     }
     case TYPE_SEPARATOR:
-        return "-";
+        return "";
     case TYPE_MENU_ITEM_CONTEXT:
         return menu_helpers::contextpath_from_guid(m_guid, m_subcommand, short_form);
     case TYPE_MENU_ITEM_MAIN:
@@ -143,11 +143,11 @@ std::string ButtonsToolbar::Button::get_name_with_type() const
     return "["s + get_type_desc() + "] "s + get_name();
 }
 
-void ButtonsToolbar::Button::read_from_file(ConfigVersion p_version, const char* p_base, const char* p_name,
+void ButtonsToolbar::Button::read_from_file(FCBVersion p_version, const char* p_base, const char* p_name,
     stream_reader* p_file, unsigned p_size, abort_callback& p_abort)
 {
     // t_filesize p_start = p_file->get_position(p_abort);
-    t_size read = 0;
+    size_t read = 0;
     while (read < p_size /* && !p_file->is_eof(p_abort)*/) {
         ButtonIdentifier id;
         p_file->read_lendian_t(id, p_abort);
@@ -155,7 +155,7 @@ void ButtonsToolbar::Button::read_from_file(ConfigVersion p_version, const char*
         p_file->read_lendian_t(size, p_abort);
         // if (size > p_file->get_size(p_abort) - p_file->get_position(p_abort))
         //    throw exception_io_data();
-        read += sizeof(t_uint32) + sizeof(t_uint32) + size;
+        read += sizeof(uint32_t) + sizeof(uint32_t) + size;
         switch (id) {
         case I_BUTTON_TYPE:
             p_file->read_lendian_t(m_type, p_abort);
@@ -204,27 +204,27 @@ void ButtonsToolbar::Button::read_from_file(ConfigVersion p_version, const char*
 void ButtonsToolbar::Button::write_to_file(stream_writer& p_file, bool b_paths, abort_callback& p_abort)
 {
     p_file.write_lendian_t(I_BUTTON_TYPE, p_abort);
-    p_file.write_lendian_t(sizeof(m_type), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_type), p_abort);
     p_file.write_lendian_t(m_type, p_abort);
 
     p_file.write_lendian_t(I_BUTTON_FILTER, p_abort);
-    p_file.write_lendian_t(sizeof(m_filter), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_filter), p_abort);
     p_file.write_lendian_t(m_filter, p_abort);
 
     p_file.write_lendian_t(I_BUTTON_SHOW, p_abort);
-    p_file.write_lendian_t(sizeof(m_show), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_show), p_abort);
     p_file.write_lendian_t(m_show, p_abort);
 
     p_file.write_lendian_t(I_BUTTON_GUID, p_abort);
-    p_file.write_lendian_t(sizeof(m_guid), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_guid), p_abort);
     p_file.write_lendian_t((GUID&)m_guid, p_abort);
 
     p_file.write_lendian_t(I_BUTTON_SUBCOMMAND, p_abort);
-    p_file.write_lendian_t(sizeof(m_subcommand), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_subcommand), p_abort);
     p_file.write_lendian_t((GUID&)m_subcommand, p_abort);
 
     p_file.write_lendian_t(I_BUTTON_CUSTOM, p_abort);
-    p_file.write_lendian_t(sizeof(m_use_custom), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_use_custom), p_abort);
     p_file.write_lendian_t(m_use_custom, p_abort);
 
     if (m_use_custom) {
@@ -232,29 +232,29 @@ void ButtonsToolbar::Button::write_to_file(stream_writer& p_file, bool b_paths, 
 
         stream_writer_memblock p_write;
         m_custom_image.write_to_file(p_write, b_paths, p_abort);
-        p_file.write_lendian_t(p_write.m_data.get_size(), p_abort);
+        p_file.write_lendian_t(gsl::narrow<uint32_t>(p_write.m_data.get_size()), p_abort);
         p_file.write(p_write.m_data.get_ptr(), p_write.m_data.get_size(), p_abort);
     }
 
     p_file.write_lendian_t(I_BUTTON_CUSTOM_HOT, p_abort);
-    p_file.write_lendian_t(sizeof(m_use_custom_hot), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_use_custom_hot), p_abort);
     p_file.write_lendian_t(m_use_custom_hot, p_abort);
 
     if (m_use_custom_hot) {
         p_file.write_lendian_t(I_BUTTON_CUSTOM_HOT_DATA, p_abort);
         stream_writer_memblock p_write;
         m_custom_hot_image.write_to_file(p_write, b_paths, p_abort);
-        p_file.write_lendian_t(p_write.m_data.get_size(), p_abort);
+        p_file.write_lendian_t(gsl::narrow<uint32_t>(p_write.m_data.get_size()), p_abort);
         p_file.write(p_write.m_data.get_ptr(), p_write.m_data.get_size(), p_abort);
     }
 
     p_file.write_lendian_t(I_BUTTON_USE_CUSTOM_TEXT, p_abort);
-    p_file.write_lendian_t(sizeof(m_use_custom_text), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_use_custom_text), p_abort);
     p_file.write_lendian_t(m_use_custom_text, p_abort);
 
     if (m_use_custom_text) {
         p_file.write_lendian_t(I_BUTTON_TEXT, p_abort);
-        p_file.write_lendian_t(m_text.length(), p_abort);
+        p_file.write_lendian_t(gsl::narrow<uint32_t>(m_text.length()), p_abort);
         p_file.write(m_text, m_text.length(), p_abort);
     }
 }

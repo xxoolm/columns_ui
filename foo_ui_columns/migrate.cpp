@@ -1,7 +1,13 @@
-#include "stdafx.h"
-#include "layout.h"
+#include "pch.h"
 
-namespace cui::migrate::v100 {
+#include "migrate.h"
+#include "config_appearance.h"
+#include "layout.h"
+#include "status_pane.h"
+
+namespace cui::migrate {
+
+namespace v100 {
 
 cfg_bool has_migrated_to_v100({0xba7516e5, 0xd1f1, 0x4784, {0xa6, 0x93, 0x62, 0x72, 0x37, 0xc3, 0x7e, 0x9c}}, false);
 
@@ -72,4 +78,69 @@ void migrate()
     }
 }
 
-} // namespace cui::migrate::v100
+} // namespace v100
+
+namespace v200 {
+
+cfg_bool has_migrated_status_pane(
+    {0x1577e396, 0xf6bb, 0x4086, {0x93, 0xfc, 0x46, 0xd7, 0x4f, 0xc5, 0xac, 0xc4}}, false);
+
+void migrate_status_pane()
+{
+    if (has_migrated_status_pane)
+        return;
+
+    has_migrated_status_pane = true;
+
+    if (main_window::config_get_is_first_run())
+        return;
+
+    status_pane::double_click_action = cfg_statusdbl;
+    status_pane::status_pane_script = main_window::config_status_bar_script.get();
+}
+
+cfg_bool has_migrated_custom_colours(
+    {0x6541170b, 0xc305, 0x4ae5, {0xa4, 0x84, 0x3c, 0x2, 0xcb, 0xf6, 0x2c, 0x7e}}, false);
+
+void migrate_custom_colours_entry(const colours::Entry::Ptr& light_entry)
+{
+    if (light_entry->colour_set.colour_scheme != colours::ColourSchemeCustom)
+        return;
+
+    auto default_colour_set = create_default_colour_set(false, colours::ColourSchemeCustom);
+    default_colour_set.use_custom_active_item_frame = light_entry->colour_set.use_custom_active_item_frame;
+
+    if (light_entry->colour_set == default_colour_set)
+        return;
+
+    const auto dark_entry = g_colour_manager_data.get_entry(light_entry->id, true);
+
+    dark_entry->colour_set = light_entry->colour_set;
+}
+
+void migrate_custom_colours()
+{
+    if (has_migrated_custom_colours)
+        return;
+
+    has_migrated_custom_colours = true;
+
+    if (main_window::config_get_is_first_run())
+        return;
+
+    migrate_custom_colours_entry(g_colour_manager_data.m_global_light_entry);
+
+    for (auto&& entry : g_colour_manager_data.m_light_entries)
+        migrate_custom_colours_entry(entry);
+}
+
+} // namespace v200
+
+void migrate_all()
+{
+    v100::migrate();
+    v200::migrate_status_pane();
+    v200::migrate_custom_colours();
+}
+
+} // namespace cui::migrate

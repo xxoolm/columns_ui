@@ -1,5 +1,6 @@
-#include "../stdafx.h"
+#include "pch.h"
 #include "ng_playlist.h"
+#include "resource_utils.h"
 #include "wic.h"
 
 namespace cui::panels::playlist_view {
@@ -8,22 +9,18 @@ bool g_get_default_nocover_bitmap_data(album_art_data_ptr& p_out, abort_callback
 {
     bool ret = false;
     const WORD resource_id = colours::is_dark_mode_active() ? IDB_DARK_NOCOVER : IDB_LIGHT_NOCOVER;
-    HRSRC rsrc = FindResource(core_api::get_my_instance(), MAKEINTRESOURCE(resource_id), L"PNG");
-    HGLOBAL handle = LoadResource(core_api::get_my_instance(), rsrc);
-    DWORD size = SizeofResource(core_api::get_my_instance(), rsrc);
-    LPVOID ptr = LockResource(handle);
-    if (ptr && size) {
-        p_out = album_art_data_impl::g_create(ptr, size);
+    const auto [data, size] = resource_utils::get_resource_data(resource_id, L"PNG");
+
+    if (data && size) {
+        p_out = album_art_data_impl::g_create(data, size);
         ret = true;
     }
-    FreeResource(handle);
     return ret;
 }
 
-wil::unique_hbitmap g_get_nocover_bitmap(
-    t_size cx, t_size cy, COLORREF cr_back, bool b_reflection, abort_callback& p_abort)
+wil::unique_hbitmap g_get_nocover_bitmap(int cx, int cy, COLORREF cr_back, bool b_reflection, abort_callback& p_abort)
 {
-    album_art_extractor_instance_v2::ptr p_extractor = static_api_ptr_t<album_art_manager_v2>()->open_stub(p_abort);
+    album_art_extractor_instance_v2::ptr p_extractor = album_art_manager_v2::get()->open_stub(p_abort);
 
     album_art_data_ptr data;
     wil::unique_hbitmap ret;
@@ -42,8 +39,8 @@ wil::unique_hbitmap g_get_nocover_bitmap(
     return ret;
 }
 
-void ArtworkReaderManager::request(const metadb_handle_ptr& p_handle, std::shared_ptr<ArtworkReader>& p_out, t_size cx,
-    t_size cy, COLORREF cr_back, bool b_reflection, BaseArtworkCompletionNotify::ptr_t p_notify)
+void ArtworkReaderManager::request(const metadb_handle_ptr& p_handle, std::shared_ptr<ArtworkReader>& p_out, int cx,
+    int cy, COLORREF cr_back, bool b_reflection, BaseArtworkCompletionNotify::ptr_t p_notify)
 {
     auto p_new_reader = std::make_shared<ArtworkReader>();
     p_new_reader->initialise(p_handle, cx, cy, cr_back, b_reflection, std::move(p_notify), shared_from_this());
@@ -54,7 +51,7 @@ void ArtworkReaderManager::request(const metadb_handle_ptr& p_handle, std::share
 
 void ArtworkReaderManager::on_reader_completion(const ArtworkReader* ptr)
 {
-    t_size index;
+    size_t index;
     if (find_current_reader(ptr, index)) {
         m_current_readers[index]->wait_for_and_release_thread();
         m_current_readers[index]->send_completion_notification(m_current_readers[index]);
@@ -89,7 +86,7 @@ public:
         ptr->m_reader = p_reader;
         ptr->m_manager = std::move(p_manager);
 
-        static_api_ptr_t<main_thread_callback_manager>()->add_callback(ptr.get_ptr());
+        main_thread_callback_manager::get()->add_callback(ptr.get_ptr());
     }
 
     bool m_aborted;
@@ -133,17 +130,17 @@ DWORD ArtworkReader::on_thread()
 unsigned ArtworkReader::read_artwork(abort_callback& p_abort)
 {
     TRACK_CALL_TEXT("artwork_reader_ng_t::read_artwork");
-    const GUID artwork_type_id = album_art_ids::cover_front;
+    constexpr GUID artwork_type_id = album_art_ids::cover_front;
 
     m_bitmaps.clear();
 
-    static_api_ptr_t<album_art_manager_v2> p_album_art_manager_v2;
+    const auto p_album_art_manager_v2 = album_art_manager_v2::get();
 
     album_art_data_ptr data;
-    auto artwork_api_v2 = p_album_art_manager_v2->open(
-        pfc::list_single_ref_t<metadb_handle_ptr>(m_handle), pfc::list_single_ref_t<GUID>(artwork_type_id), p_abort);
 
     try {
+        const auto artwork_api_v2 = p_album_art_manager_v2->open(pfc::list_single_ref_t<metadb_handle_ptr>(m_handle),
+            pfc::list_single_ref_t<GUID>(artwork_type_id), p_abort);
         data = artwork_api_v2->query(artwork_type_id, p_abort);
     } catch (const exception_aborted&) {
         throw;
@@ -173,7 +170,7 @@ unsigned ArtworkReader::read_artwork(abort_callback& p_abort)
 }
 
 wil::unique_hbitmap g_create_hbitmap_from_image(
-    Gdiplus::Bitmap& bm, t_size& cx, t_size& cy, COLORREF cr_back, bool b_reflection)
+    Gdiplus::Bitmap& bm, int& cx, int& cy, COLORREF cr_back, bool b_reflection)
 {
     HDC dc = nullptr;
     HDC dcc = nullptr;
@@ -182,11 +179,11 @@ wil::unique_hbitmap g_create_hbitmap_from_image(
     // cy = bm.GetHeight();
     if (b_reflection)
         cy = cx; //(cy*11 -7) / 14;
-    t_size ocx = cx;
-    t_size ocy = cy;
+    int ocx = cx;
+    int ocy = cy;
 
-    t_size cx_source = bm.GetWidth();
-    t_size cy_source = bm.GetHeight();
+    int cx_source = gsl::narrow<int>(bm.GetWidth());
+    int cy_source = gsl::narrow<int>(bm.GetHeight());
 
     double ar_source = (double)cx_source / (double)cy_source;
     double ar_dest = (double)ocx / (double)ocy;
@@ -201,7 +198,7 @@ wil::unique_hbitmap g_create_hbitmap_from_image(
     if ((ocx - cx) % 2)
         cx++;
 
-    t_size reflect_cy = b_reflection ? (cy * 3) / 11 : 0;
+    int reflect_cy = b_reflection ? (cy * 3) / 11 : 0;
     wil::unique_hbitmap bitmap(CreateCompatibleBitmap(dc, cx, cy + reflect_cy));
     HBITMAP bm_old = SelectBitmap(dcc, bitmap.get());
 
@@ -279,7 +276,7 @@ wil::unique_hbitmap g_create_hbitmap_from_image(
 }
 
 wil::unique_hbitmap g_create_hbitmap_from_data(
-    const album_art_data_ptr& data, t_size& cx, t_size& cy, COLORREF cr_back, bool b_reflection)
+    const album_art_data_ptr& data, int& cx, int& cy, COLORREF cr_back, bool b_reflection)
 {
     std::unique_ptr<Gdiplus::Bitmap> bitmap;
     try {
@@ -293,12 +290,12 @@ wil::unique_hbitmap g_create_hbitmap_from_data(
     return g_create_hbitmap_from_image(*bitmap, cx, cy, cr_back, b_reflection);
 }
 
-wil::shared_hbitmap PlaylistView::request_group_artwork(t_size index_item)
+wil::shared_hbitmap PlaylistView::request_group_artwork(size_t index_item)
 {
     if (!m_gdiplus_initialised)
         return nullptr;
 
-    const t_size group_count = m_scripts.get_count();
+    const size_t group_count = m_scripts.get_count();
     if (group_count == 0)
         return nullptr;
 
@@ -306,8 +303,8 @@ wil::shared_hbitmap PlaylistView::request_group_artwork(t_size index_item)
     PlaylistViewGroup* group = item->get_group(group_count - 1);
 
     if (!group->m_artwork_load_attempted) {
-        t_size cx = get_group_info_area_width();
-        t_size cy = get_group_info_area_height();
+        const auto cx = get_group_info_area_width();
+        const auto cy = get_group_info_area_height();
 
         ArtworkCompletionNotify::ptr_t ptr = std::make_shared<ArtworkCompletionNotify>();
         ptr->m_group = group;
@@ -330,7 +327,7 @@ wil::shared_hbitmap PlaylistView::request_group_artwork(t_size index_item)
 }
 
 wil::shared_hbitmap ArtworkReaderManager::request_nocover_image(
-    t_size cx, t_size cy, COLORREF cr_back, bool b_reflection, abort_callback& p_abort)
+    int cx, int cy, COLORREF cr_back, bool b_reflection, abort_callback& p_abort)
 {
     insync(m_nocover_sync);
     if (m_nocover_bitmap && m_nocover_cx == cx && m_nocover_cy == cy)

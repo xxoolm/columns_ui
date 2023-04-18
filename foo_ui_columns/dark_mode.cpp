@@ -1,9 +1,13 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "dark_mode.h"
+
+#include "system_appearance_manager.h"
 
 namespace cui::dark {
 
-bool does_os_support_dark_mode()
+namespace {
+
+bool check_windows_10_build(DWORD build_number)
 {
     OSVERSIONINFOEX osviex{};
     osviex.dwOSVersionInfoSize = sizeof(osviex);
@@ -14,24 +18,42 @@ bool does_os_support_dark_mode()
 
     osviex.dwMajorVersion = 10;
     osviex.dwMinorVersion = 0;
-    osviex.dwBuildNumber = 19041;
+    osviex.dwBuildNumber = build_number;
 
-    return VerifyVersionInfoW(&osviex, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR, mask) != FALSE;
+    return VerifyVersionInfoW(&osviex, VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER, mask) != FALSE;
+}
+
+bool is_windows_11_rtm_or_newer()
+{
+    static auto is_22000_or_newer = check_windows_10_build(22000);
+    return is_22000_or_newer;
+}
+
+} // namespace
+
+bool does_os_support_dark_mode()
+{
+    static auto is_19041_or_newer = check_windows_10_build(19041);
+    return is_19041_or_newer;
+}
+
+bool is_native_dark_spin_available()
+{
+    // Earliest known build number – exact build number unknown.
+    return check_windows_10_build(22579);
 }
 
 bool are_private_apis_allowed()
 {
     OSVERSIONINFO osvi{};
     osvi.dwOSVersionInfoSize = sizeof(osvi);
-#pragma warning(push)
-#pragma warning(disable : 4996)
+#pragma warning(suppress : 4996)
     GetVersionEx(&osvi);
-#pragma warning(pop)
 
     if (osvi.dwMajorVersion != 10 || osvi.dwMinorVersion != 0)
         return false;
 
-    return osvi.dwBuildNumber >= 19041 && osvi.dwBuildNumber <= 22000;
+    return osvi.dwBuildNumber >= 19041 && osvi.dwBuildNumber <= 22624;
 }
 
 void set_app_mode(PreferredAppMode mode)
@@ -40,21 +62,53 @@ void set_app_mode(PreferredAppMode mode)
         return;
 
     using SetPreferredAppModeProc = int(__stdcall*)(int);
+    using FlushMenuThemesProc = void(__stdcall*)();
 
     const wil::unique_hmodule uxtheme(THROW_LAST_ERROR_IF_NULL(LoadLibrary(L"uxtheme.dll")));
 
     const auto set_preferred_app_mode
         = reinterpret_cast<SetPreferredAppModeProc>(GetProcAddress(uxtheme.get(), MAKEINTRESOURCEA(135)));
 
+    const auto flush_menu_themes
+        = reinterpret_cast<FlushMenuThemesProc>(GetProcAddress(uxtheme.get(), MAKEINTRESOURCEA(136)));
+
     set_preferred_app_mode(WI_EnumValue(mode));
+    flush_menu_themes();
 }
 
 void set_titlebar_mode(HWND wnd, bool is_dark)
 {
-    // Valid in Windows 10 10.0.18985 and newer (effectively 20H1+)
-    constexpr DWORD DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     const BOOL value = is_dark;
     DwmSetWindowAttribute(wnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+}
+
+void force_titlebar_redraw(HWND wnd)
+{
+    if (is_windows_11_rtm_or_newer() || !IsWindowVisible(wnd))
+        return;
+
+    // The below is a hack to force the titlebar to redraw on Windows 10 (little else works).
+    // Does not handle layered windows without alpha.
+    const auto ex_styles = GetWindowLongPtr(wnd, GWL_EXSTYLE);
+
+    if (!ex_styles)
+        return;
+
+    if (ex_styles & WS_EX_LAYERED) {
+        BYTE alpha{};
+        DWORD flags{};
+
+        if (!GetLayeredWindowAttributes(wnd, nullptr, &alpha, &flags))
+            return;
+
+        const auto is_opaque = alpha == 255;
+        SetLayeredWindowAttributes(wnd, NULL, is_opaque ? 254 : alpha, is_opaque ? flags : flags ^ LWA_ALPHA);
+        SetLayeredWindowAttributes(wnd, NULL, alpha, flags);
+    } else {
+        SetWindowLongPtr(wnd, GWL_EXSTYLE, ex_styles | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(wnd, 0, 254, LWA_ALPHA);
+        SetWindowLongPtr(wnd, GWL_EXSTYLE, ex_styles);
+    }
 }
 
 namespace {
@@ -64,18 +118,49 @@ consteval COLORREF create_grey(const int value)
     return RGB(value, value, value);
 }
 
-enum class DarkColour : COLORREF {
-    DARK_000 = create_grey(32),
-    DARK_100 = create_grey(42),
-    DARK_190 = create_grey(51),
-    DARK_200 = create_grey(56),
-    DARK_300 = create_grey(77),
-    DARK_400 = create_grey(88),
-    DARK_500 = create_grey(98),
-    DARK_600 = create_grey(119),
-    DARK_750 = create_grey(166),
-    DARK_999 = create_grey(255),
+enum class DarkColourID : COLORREF {
+    DARK_000,
+    DARK_200,
+    DARK_250,
+    DARK_300,
+    DARK_400,
+    DARK_500,
+    DARK_600,
+    DARK_700,
+    DARK_740,
+    DARK_750,
+    DARK_999,
 };
+
+COLORREF get_base_dark_colour(DarkColourID colour_id)
+{
+    switch (colour_id) {
+    case DarkColourID::DARK_000:
+        return is_windows_11_rtm_or_newer() ? create_grey(25) : create_grey(32);
+    case DarkColourID::DARK_200:
+        return create_grey(51);
+    case DarkColourID::DARK_250:
+        return create_grey(64);
+    case DarkColourID::DARK_300:
+        return create_grey(77);
+    case DarkColourID::DARK_400:
+        return create_grey(88);
+    case DarkColourID::DARK_500:
+        return create_grey(98);
+    case DarkColourID::DARK_600:
+        return create_grey(119);
+    case DarkColourID::DARK_700:
+        return create_grey(131);
+    case DarkColourID::DARK_740:
+        return create_grey(155);
+    case DarkColourID::DARK_750:
+        return create_grey(166);
+    case DarkColourID::DARK_999:
+        return create_grey(255);
+    default:
+        uBugCheck();
+    }
+}
 
 wil::unique_hbrush get_dark_colour_brush(ColourID colour_id)
 {
@@ -87,10 +172,26 @@ int get_light_colour_system_id(ColourID colour_id)
     switch (colour_id) {
     case ColourID::LayoutBackground:
         return COLOR_BTNFACE;
+    case ColourID::PanelCaptionText:
+        return COLOR_MENUTEXT;
     case ColourID::PanelCaptionBackground:
         return COLOR_BTNFACE;
     case ColourID::StatusBarText:
         return COLOR_MENUTEXT;
+    case ColourID::StatusPaneBackground:
+        return COLOR_BTNFACE;
+    case ColourID::StatusPaneText:
+        return COLOR_BTNTEXT;
+    case ColourID::StatusPaneTopLine:
+        return COLOR_3DDKSHADOW;
+    case ColourID::ToolbarFlatHotBackground:
+        return COLOR_HIGHLIGHT;
+    case ColourID::ToolbarFlatHotText:
+        return COLOR_HIGHLIGHTTEXT;
+    case ColourID::VolumeChannelTopEdge:
+        return COLOR_3DSHADOW;
+    case ColourID::VolumeChannelBottomAndRightEdge:
+        return COLOR_3DHILIGHT;
     case ColourID::VolumePopupBackground:
         return COLOR_BTNFACE;
     case ColourID::VolumePopupBorder:
@@ -112,83 +213,121 @@ wil::unique_hbrush get_light_colour_brush(ColourID colour_id)
     return wil::unique_hbrush(GetSysColorBrush(get_light_colour_system_id(colour_id)));
 }
 
-COLORREF winrt_color_to_colorref(const winrt::Windows::UI::Color& colour)
-{
-    return RGB(colour.R, colour.G, colour.B);
-}
-
-AccentColours fetch_system_accent_colours()
-{
-    try {
-        const winrt::Windows::UI::ViewManagement::UISettings settings;
-        const winrt::Windows::UI::Color accent
-            = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        const winrt::Windows::UI::Color light_accent
-            = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::AccentLight1);
-
-        return {winrt_color_to_colorref(accent), winrt_color_to_colorref(light_accent)};
-    } catch (winrt::hresult_error&) {
-        return {WI_EnumValue(DarkColour::DARK_600), WI_EnumValue(DarkColour::DARK_750)};
-    };
-}
-
-std::optional<AccentColours> accent_colours;
-
 } // namespace
-
-AccentColours get_system_accent_colours()
-{
-    // TODO: Flush these on change
-    if (!accent_colours)
-        accent_colours = fetch_system_accent_colours();
-
-    return *accent_colours;
-}
 
 COLORREF get_dark_colour(ColourID colour_id)
 {
     switch (colour_id) {
+    case ColourID::CheckboxDisabledText:
+        return get_base_dark_colour(DarkColourID::DARK_700);
+    case ColourID::CheckboxText:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::EditBackground:
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::LayoutBackground:
-        return WI_EnumValue(DarkColour::DARK_190);
+        return get_base_dark_colour(DarkColourID::DARK_200);
+    case ColourID::PanelCaptionText:
+        return get_base_dark_colour(DarkColourID::DARK_999);
     case ColourID::PanelCaptionBackground:
-        return WI_EnumValue(DarkColour::DARK_300);
+        return get_base_dark_colour(DarkColourID::DARK_300);
+    case ColourID::ToolbarDivider:
+        return get_base_dark_colour(DarkColourID::DARK_400);
+    case ColourID::ToolbarFlatHotBackground:
+        return get_base_dark_colour(DarkColourID::DARK_500);
+    case ColourID::ToolbarFlatHotText:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::RebarBackground:
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::RebarBandBorder:
-        return WI_EnumValue(DarkColour::DARK_400);
+        return get_base_dark_colour(DarkColourID::DARK_400);
+    case ColourID::SpinBackground:
+        return get_base_dark_colour(DarkColourID::DARK_200);
+    case ColourID::SpinBuddyButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_200);
+    case ColourID::SpinBuddyButtonBorder:
+        return get_base_dark_colour(DarkColourID::DARK_740);
+    case ColourID::SpinButtonBorder:
+        return get_base_dark_colour(DarkColourID::DARK_400);
+    case ColourID::SpinButtonArrow:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::SpinButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_000);
+    case ColourID::SpinDisabledBuddyButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_000);
+    case ColourID::SpinDisabledBuddyButtonBorder:
+        return get_base_dark_colour(DarkColourID::DARK_250);
+    case ColourID::SpinDisabledButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_000);
+    case ColourID::SpinHotBuddyButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_300);
+    case ColourID::SpinHotButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_250);
+    case ColourID::SpinPressedBuddyButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_500);
+    case ColourID::SpinPressedButtonBackground:
+        return get_base_dark_colour(DarkColourID::DARK_500);
     case ColourID::StatusBarBackground:
-        return WI_EnumValue(DarkColour::DARK_200);
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::StatusBarText:
-        return WI_EnumValue(DarkColour::DARK_999);
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::StatusPaneBackground:
+        return get_base_dark_colour(DarkColourID::DARK_200);
+    case ColourID::StatusPaneText:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::StatusPaneTopLine:
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::TabControlBackground:
-        return WI_EnumValue(DarkColour::DARK_200);
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::TabControlItemBackground:
-        return WI_EnumValue(DarkColour::DARK_200);
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::TabControlItemText:
-        return WI_EnumValue(DarkColour::DARK_999);
+        return get_base_dark_colour(DarkColourID::DARK_999);
     case ColourID::TabControlItemBorder:
-        return WI_EnumValue(DarkColour::DARK_000);
+        return get_base_dark_colour(DarkColourID::DARK_000);
     case ColourID::TabControlActiveItemBackground:
-        return WI_EnumValue(DarkColour::DARK_500);
+        return get_base_dark_colour(DarkColourID::DARK_500);
     case ColourID::TabControlHotItemBackground:
-        return WI_EnumValue(DarkColour::DARK_300);
+        return get_base_dark_colour(DarkColourID::DARK_300);
     case ColourID::TabControlHotActiveItemBackground:
-        return WI_EnumValue(DarkColour::DARK_600);
+        return get_base_dark_colour(DarkColourID::DARK_500);
     case ColourID::TrackbarChannel:
-        return WI_EnumValue(DarkColour::DARK_400);
+        return get_base_dark_colour(DarkColourID::DARK_400);
     case ColourID::TrackbarThumb:
-        return get_system_accent_colours().standard;
+        if (const auto modern_colours = system_appearance_manager::get_modern_colours())
+            return modern_colours->accent;
+
+        return get_base_dark_colour(DarkColourID::DARK_600);
     case ColourID::TrackbarHotThumb:
-        return get_system_accent_colours().light_1;
+        if (const auto modern_colours = system_appearance_manager::get_modern_colours())
+            return modern_colours->accent_light_1;
+
+        return get_base_dark_colour(DarkColourID::DARK_750);
     case ColourID::TrackbarDisabledThumb:
-        return WI_EnumValue(DarkColour::DARK_400);
+        return get_base_dark_colour(DarkColourID::DARK_400);
+    case ColourID::TreeViewBackground:
+        return get_base_dark_colour(DarkColourID::DARK_000);
+    case ColourID::TreeViewText:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case ColourID::VolumeChannelTopEdge:
+        return get_base_dark_colour(DarkColourID::DARK_500);
+    case ColourID::VolumeChannelBottomAndRightEdge:
+        return get_base_dark_colour(DarkColourID::DARK_500);
     case ColourID::VolumePopupBackground:
-        return WI_EnumValue(DarkColour::DARK_200);
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case ColourID::VolumePopupBorder:
-        return WI_EnumValue(DarkColour::DARK_300);
+        return get_base_dark_colour(DarkColourID::DARK_300);
     case ColourID::VolumePopupText:
-        return WI_EnumValue(DarkColour::DARK_999);
+        return get_base_dark_colour(DarkColourID::DARK_999);
     default:
         uBugCheck();
     }
+}
+
+Gdiplus::Color get_dark_gdiplus_colour(ColourID colour_id)
+{
+    Gdiplus::Color colour;
+    colour.SetFromCOLORREF(get_dark_colour(colour_id));
+    return colour;
 }
 
 COLORREF get_colour(ColourID colour_id, bool is_dark)
@@ -203,48 +342,30 @@ wil::unique_hbrush get_colour_brush(ColourID colour_id, bool is_dark)
 
 LazyResource<wil::unique_hbrush> get_colour_brush_lazy(ColourID colour_id, bool is_dark)
 {
-    return {[colour_id, is_dark] { return get_colour_brush(colour_id, is_dark); }};
+    return LazyResource<wil::unique_hbrush>{[colour_id, is_dark] { return get_colour_brush(colour_id, is_dark); }};
 }
-
-namespace {
 
 COLORREF get_dark_system_colour(int system_colour_id)
 {
     // Unfortunately, these are hard-coded as there doesn't seem to be a simple
     // way to get a similar set of dark mode colours from Windows.
     switch (system_colour_id) {
-    case COLOR_HIGHLIGHTTEXT:
-    case COLOR_MENUTEXT:
-    case COLOR_WINDOWTEXT:
-        return RGB(255, 255, 255);
-    case COLOR_WINDOW:
-        return RGB(32, 32, 32);
-    case COLOR_HIGHLIGHT:
-        return RGB(98, 98, 98);
     case COLOR_BTNTEXT:
-        return RGB(255, 255, 255);
+    case COLOR_HIGHLIGHTTEXT:
+    case COLOR_WINDOWTEXT:
+        return get_base_dark_colour(DarkColourID::DARK_999);
+    case COLOR_WINDOW:
+        return get_base_dark_colour(DarkColourID::DARK_000);
+    case COLOR_HIGHLIGHT:
+        return get_base_dark_colour(DarkColourID::DARK_500);
     case COLOR_BTNFACE:
-        return RGB(51, 51, 51);
+        return get_base_dark_colour(DarkColourID::DARK_200);
     case COLOR_WINDOWFRAME:
-        return RGB(119, 119, 119);
-    case COLOR_3DDKSHADOW:
-        // Standard value: RGB(105, 105, 105)
-        return RGB(28, 28, 28);
-    case COLOR_3DHILIGHT:
-        // Standard value: RGB(255, 255, 255)
-        return RGB(100, 100, 100);
-    case COLOR_3DLIGHT:
-        // Standard value: RGB(227, 227, 227)
-        return RGB(42, 42, 42);
-    case COLOR_3DSHADOW:
-        // Standard value: RGB(160, 160, 160)
-        return RGB(100, 100, 100);
+        return get_base_dark_colour(DarkColourID::DARK_600);
     default:
         return RGB(255, 0, 0);
     }
 }
-
-} // namespace
 
 COLORREF get_system_colour(int system_colour_id, bool is_dark)
 {
@@ -269,8 +390,15 @@ void draw_layout_background(HWND wnd, HDC dc)
     RECT rc{};
     GetClientRect(wnd, &rc);
 
-    const auto brush = dark::get_colour_brush(ColourID::LayoutBackground, colours::is_dark_mode_active());
+    const auto brush = get_colour_brush(ColourID::LayoutBackground, colours::is_dark_mode_active());
     FillRect(dc, &rc, brush.get());
+}
+
+void handle_modern_background_paint(HWND wnd, HWND wnd_button, bool is_dark)
+{
+    const auto top_background_brush = get_system_colour_brush(COLOR_WINDOW, is_dark);
+    const auto bottom_background_brush = get_system_colour_brush(COLOR_3DFACE, is_dark);
+    uih::handle_modern_background_paint(wnd, wnd_button, top_background_brush.get(), bottom_background_brush.get());
 }
 
 } // namespace cui::dark

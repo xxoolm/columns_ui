@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "config.h"
 #include "playlist_view_tfhooks.h"
@@ -45,21 +45,21 @@ void double_to_string(double blah, pfc::string_base& p_out, int points = 10, boo
 
 void speedtest(ColumnListCRef columns, bool b_global)
 {
-    static_api_ptr_t<playlist_manager> playlist_api;
-    static_api_ptr_t<titleformat_compiler> titleformat_api;
+    const auto playlist_api = playlist_manager::get();
+    const auto titleformat_api = titleformat_compiler::get();
     service_ptr_t<genrand_service> p_genrand = genrand_service::g_create();
 
-    unsigned activeplaylist_item_count = playlist_api->activeplaylist_get_item_count();
+    const auto activeplaylist_item_count = playlist_api->activeplaylist_get_item_count();
 
     bool b_global_colour_used = false;
     bool b_column_times_valid = false;
 
-    unsigned column_count = columns.get_count();
+    const auto column_count = columns.get_count();
     pfc::array_t<ColumnTimes> times_columns;
     times_columns.set_size(column_count);
 
     {
-        for (unsigned i = 0; i < column_count; i++)
+        for (size_t i = 0; i < column_count; i++)
             if (!columns[i]->use_custom_colour) {
                 b_global_colour_used = true;
                 break;
@@ -109,8 +109,9 @@ void speedtest(ColumnListCRef columns, bool b_global)
         b_column_times_valid = true;
 
         {
-            for (unsigned i = 0; i < 16; i++)
-                tracks[i] = p_genrand->genrand(activeplaylist_item_count);
+            for (auto i = 0; i < 16; i++)
+                tracks[i] = p_genrand->genrand(
+                    gsl::narrow<unsigned>(std::min(activeplaylist_item_count, static_cast<size_t>(UINT32_MAX))));
         }
 
         SYSTEMTIME st;

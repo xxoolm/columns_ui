@@ -1,6 +1,7 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "playlist_tabs.h"
 
+#include "dark_mode_spin.h"
 #include "dark_mode_tabs.h"
 #include "playlist_manager_utils.h"
 
@@ -13,9 +14,9 @@ cfg_guid cfg_default_playlist(
 const GUID g_guid_playlist_switcher_tabs_font
     = {0x942c36a4, 0x4e28, 0x4cea, {0x96, 0x44, 0xf2, 0x23, 0xc9, 0xa8, 0x38, 0xec}};
 
-void remove_playlist_helper(t_size index)
+void remove_playlist_helper(size_t index)
 {
-    static_api_ptr_t<playlist_manager> api;
+    const auto api = playlist_manager::get();
     if (index == api->get_active_playlist()) {
         if (index && index + 1 == api->get_playlist_count())
             api->set_active_playlist(index - 1);
@@ -38,8 +39,8 @@ void PlaylistTabs::get_supported_panels(
     uie::window_host_ptr ptr;
     if (temp->service_query_t(ptr))
         (static_cast<WindowHost*>(ptr.get_ptr()))->set_this(this);
-    t_size count = p_windows.get_count();
-    for (t_size i = 0; i < count; i++)
+    size_t count = p_windows.get_count();
+    for (size_t i = 0; i < count; i++)
         p_mask_unsupported.set(i, !p_windows[i]->is_available(ptr));
 }
 
@@ -74,7 +75,7 @@ bool PlaylistTabs::is_point_ours(HWND wnd_point, const POINT& pt_screen, pfc::li
 void PlaylistTabs::on_font_change()
 {
     if (g_font != nullptr) {
-        unsigned count = list_wnd.get_count();
+        const auto count = list_wnd.get_count();
         for (unsigned n = 0; n < count; n++) {
             HWND wnd = list_wnd[n]->wnd_tabs;
             if (wnd)
@@ -83,9 +84,9 @@ void PlaylistTabs::on_font_change()
         DeleteObject(g_font);
     }
 
-    g_font = static_api_ptr_t<fonts::manager>()->get_font(g_guid_playlist_switcher_tabs_font);
+    g_font = fb2k::std_api_get<fonts::manager>()->get_font(g_guid_playlist_switcher_tabs_font);
 
-    unsigned count = list_wnd.get_count();
+    const auto count = list_wnd.get_count();
     for (unsigned n = 0; n < count; n++) {
         HWND wnd = list_wnd[n]->wnd_tabs;
         if (wnd) {
@@ -170,7 +171,7 @@ bool PlaylistTabs::create_tabs()
     bool rv = false;
     bool force_close = false;
 
-    static_api_ptr_t<playlist_manager> playlist_api;
+    const auto playlist_api = playlist_manager::get();
 
     if (cfg_pl_autohide) {
         force_close = (playlist_api->get_playlist_count() <= 1);
@@ -181,7 +182,7 @@ bool PlaylistTabs::create_tabs()
         wnd_tabs = nullptr;
         rv = true;
     } else if (!wnd_tabs && !force_close) {
-        int t = playlist_api->get_playlist_count();
+        const auto t = playlist_api->get_playlist_count();
         pfc::string8 temp;
 
         int x = 0;
@@ -190,8 +191,9 @@ bool PlaylistTabs::create_tabs()
         int cy = 0;
 
         wnd_tabs = CreateWindowEx(0, WC_TABCONTROL, _T("Playlist switcher"),
-            WS_CHILD | WS_TABSTOP | TCS_HOTTRACK | TCS_TABS | (t > 1 ? TCS_MULTILINE : 0) | (true ? WS_VISIBLE : 0), x,
-            y, cx, cy, m_host_wnd, HMENU(5002), core_api::get_my_instance(), nullptr);
+            WS_CHILD | WS_TABSTOP | TCS_HOTTRACK | TCS_TABS | (t > 1 ? TCS_MULTILINE : 0) | (true ? WS_VISIBLE : 0)
+                | WS_CLIPCHILDREN,
+            x, y, cx, cy, m_host_wnd, HMENU(5002), core_api::get_my_instance(), nullptr);
 
         if (wnd_tabs) {
             SetWindowLongPtr(wnd_tabs, GWLP_USERDATA, (LPARAM)(this));
@@ -206,9 +208,9 @@ bool PlaylistTabs::create_tabs()
             tabproc = (WNDPROC)SetWindowLongPtr(wnd_tabs, GWLP_WNDPROC, (LPARAM)main_hook);
 
             pfc::string8 temp2;
-            for (int i = 0; i < t; i++) {
+            for (size_t i = 0; i < t; i++) {
                 playlist_api->playlist_get_name(i, temp);
-                uTabCtrl_InsertItemText(wnd_tabs, i, temp);
+                uTabCtrl_InsertItemText(wnd_tabs, gsl::narrow<int>(i), temp);
             }
 
             TabCtrl_SetCurSel(wnd_tabs, playlist_api->get_active_playlist());
@@ -259,17 +261,32 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_ERASEBKGND:
-        if (!colours::is_dark_mode_active())
-            break;
-
         return FALSE;
-    case WM_PAINT: {
-        if (!colours::is_dark_mode_active())
-            break;
-
-        dark::handle_tab_control_paint(wnd);
+    case WM_PAINT:
+        if (colours::is_dark_mode_active())
+            dark::handle_tab_control_paint(wnd);
+        else
+            uih::paint_subclassed_window_with_buffering(wnd, tabproc);
         return 0;
-    }
+    case WM_PARENTNOTIFY:
+        switch (LOWORD(wp)) {
+        case WM_CREATE: {
+            const auto child_window = reinterpret_cast<HWND>(lp);
+            std::array<wchar_t, 128> class_name{};
+            GetClassName(child_window, class_name.data(), gsl::narrow<int>(class_name.size()));
+
+            if (!wcsncmp(UPDOWN_CLASSW, class_name.data(), class_name.size())) {
+                m_up_down_control_wnd = child_window;
+                set_up_down_window_theme();
+            }
+            break;
+        }
+        case WM_DESTROY:
+            if (m_up_down_control_wnd == reinterpret_cast<HWND>(lp))
+                m_up_down_control_wnd = nullptr;
+            break;
+        }
+        break;
     case WM_GETDLGCODE:
         return DLGC_WANTALLKEYS;
     case WM_KEYDOWN: {
@@ -293,7 +310,7 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             hittest.pt.y = GET_Y_LPARAM(lp);
             int idx = TabCtrl_HitTest(wnd_tabs, &hittest);
             if (idx >= 0) {
-                static_api_ptr_t<playlist_manager> playlist_api;
+                const auto playlist_api = playlist_manager::get();
                 // if (cfg_playlists_shift_lmb && (wp & MK_SHIFT)) remove_playlist_helper(idx);
                 // else
                 if (cfg_drag_pl) {
@@ -310,27 +327,28 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             TCHITTESTINFO hittest;
             hittest.pt.x = GET_X_LPARAM(lp);
             hittest.pt.y = GET_Y_LPARAM(lp);
-            int idx = TabCtrl_HitTest(wnd_tabs, &hittest);
-            if (idx >= 0 && !PtInRect(&m_dragging_rect, hittest.pt)) {
-                int cur_idx = m_dragging_idx;
-                static_api_ptr_t<playlist_manager> playlist_api;
-                int count = playlist_api->get_playlist_count();
+            const auto hit_test_index = TabCtrl_HitTest(wnd_tabs, &hittest);
+            if (hit_test_index >= 0 && !PtInRect(&m_dragging_rect, hittest.pt)) {
+                const auto cur_idx = m_dragging_idx;
+                const auto playlist_api = playlist_manager::get();
+                const auto count = playlist_api->get_playlist_count();
+                const auto target_index = gsl::narrow<size_t>(hit_test_index);
 
-                int n = cur_idx;
+                auto n = cur_idx;
                 order_helper order(count);
-                if (n < idx) {
-                    while (n < idx && n < count) {
+                if (n < target_index) {
+                    while (n < target_index && n < count) {
                         order.swap(n, n + 1);
                         n++;
                     }
-                } else if (n > idx) {
-                    while (n > idx && n > 0) {
+                } else if (n > target_index) {
+                    while (n > target_index && n > 0) {
                         order.swap(n, n - 1);
                         n--;
                     }
                 }
                 if (n != cur_idx) {
-                    TabCtrl_GetItemRect(wnd, n, &m_dragging_rect);
+                    TabCtrl_GetItemRect(wnd, gsl::narrow<int>(n), &m_dragging_rect);
                     playlist_api->reorder(order.get_ptr(), count);
                     m_dragging_idx = n;
                 }
@@ -351,7 +369,7 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         hittest.pt.x = GET_X_LPARAM(lp);
         hittest.pt.y = GET_Y_LPARAM(lp);
         int idx = TabCtrl_HitTest(wnd_tabs, &hittest);
-        static_api_ptr_t<playlist_manager> playlist_api;
+        const auto playlist_api = playlist_manager::get();
         if (idx >= 0) {
             if (config::cfg_playlist_tabs_middle_click && msg == WM_MBUTTONUP) {
                 remove_playlist_helper(idx);
@@ -360,7 +378,7 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 playlist_manager_utils::rename_playlist(idx, get_wnd());
             }
         } else {
-            unsigned new_idx = playlist_api->create_playlist(
+            const auto new_idx = playlist_api->create_playlist(
                 pfc::string8("Untitled"), pfc_infinite, playlist_api->get_playlist_count());
             playlist_api->set_active_playlist(new_idx);
         }
@@ -371,14 +389,14 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
             HWND wnd_child = GetWindow(wnd, GW_CHILD);
             WCHAR str_class[129]{};
-            if (wnd_child && RealGetWindowClass(wnd_child, str_class, tabsize(str_class) - 1)
+            if (wnd_child && RealGetWindowClass(wnd_child, str_class, gsl::narrow_cast<UINT>(std::size(str_class)) - 1)
                 && !wcscmp(str_class, UPDOWN_CLASS) && IsWindowVisible(wnd_child)) {
                 INT min = NULL;
                 INT max = NULL;
                 INT index = NULL;
                 BOOL err = FALSE;
                 SendMessage(wnd_child, UDM_GETRANGE32, (WPARAM)&min, (LPARAM)&max);
-                index = SendMessage(wnd_child, UDM_GETPOS32, (WPARAM)NULL, (LPARAM)&err);
+                index = gsl::narrow<int>(SendMessage(wnd_child, UDM_GETPOS32, (WPARAM)NULL, (LPARAM)&err));
 
                 // if (!err)
                 {
@@ -414,7 +432,7 @@ LRESULT WINAPI PlaylistTabs::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         break;
     }
-    return uCallWindowProc(tabproc, wnd, msg, wp, lp);
+    return CallWindowProc(tabproc, wnd, msg, wp, lp);
 }
 
 void PlaylistTabs::on_child_position_change()
@@ -424,6 +442,21 @@ void PlaylistTabs::on_child_position_change()
         uie::size_limit_maximum_height | uie::size_limit_maximum_width | uie::size_limit_minimum_height
             | uie::size_limit_minimum_width);
     // on_size();
+}
+
+void PlaylistTabs::set_up_down_window_theme() const
+{
+    if (!m_up_down_control_wnd)
+        return;
+
+    const auto is_dark = colours::is_dark_mode_active();
+
+    if (is_dark)
+        dark::spin::add_window(m_up_down_control_wnd);
+    else
+        dark::spin::remove_window(m_up_down_control_wnd);
+
+    SetWindowTheme(m_up_down_control_wnd, is_dark ? L"DarkMode_Explorer" : nullptr, nullptr);
 }
 
 void PlaylistTabs::refresh_child_data(abort_callback& aborter) const
@@ -437,11 +470,11 @@ void PlaylistTabs::get_config(stream_writer* out, abort_callback& p_abort) const
     out->write_lendian_t(m_child_guid, p_abort);
 
     refresh_child_data();
-    out->write_lendian_t(m_child_data.get_size(), p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(m_child_data.get_size()), p_abort);
     out->write(m_child_data.get_ptr(), m_child_data.get_size(), p_abort);
 }
 
-void PlaylistTabs::set_config(stream_reader* config, t_size p_size, abort_callback& p_abort)
+void PlaylistTabs::set_config(stream_reader* config, size_t p_size, abort_callback& p_abort)
 {
     if (p_size) {
         config->read_lendian_t(m_child_guid, p_abort);
@@ -467,15 +500,15 @@ void PlaylistTabs::export_config(stream_writer* p_writer, abort_callback& p_abor
         } else
             throw fcl::exception_missing_panel();
     }
-    pfc::array_t<t_uint8> data;
+    pfc::array_t<uint8_t> data;
     stream_writer_memblock_ref w(data);
     if (ptr.is_valid())
         ptr->export_config(&w, abortCallback);
-    p_writer->write_lendian_t(data.get_size(), p_abort);
+    p_writer->write_lendian_t(gsl::narrow<uint32_t>(data.get_size()), p_abort);
     p_writer->write(data.get_ptr(), data.get_size(), p_abort);
 }
 
-void PlaylistTabs::import_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void PlaylistTabs::import_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     if (p_size) {
         p_reader->read_lendian_t(m_child_guid, p_abort);
@@ -483,7 +516,7 @@ void PlaylistTabs::import_config(stream_reader* p_reader, t_size p_size, abort_c
         p_reader->read_lendian_t(size, p_abort);
         m_child_data.set_size(0);
         // m_child_data.set_size(size);
-        pfc::array_t<t_uint8> data;
+        pfc::array_t<uint8_t> data;
         data.set_size(size);
         p_reader->read(data.get_ptr(), size, p_abort);
         uie::window_ptr ptr;
@@ -498,7 +531,7 @@ void PlaylistTabs::import_config(stream_reader* p_reader, t_size p_size, abort_c
     }
 }
 
-uie::splitter_item_t* PlaylistTabs::get_panel(unsigned index) const
+uie::splitter_item_t* PlaylistTabs::get_panel(size_t index) const
 {
     auto ptr = new uie::splitter_item_simple_t;
     ptr->set_panel_guid(m_child_guid);
@@ -514,17 +547,17 @@ uie::splitter_item_t* PlaylistTabs::get_panel(unsigned index) const
     return ptr;
 }
 
-unsigned PlaylistTabs::get_maximum_panel_count() const
+size_t PlaylistTabs::get_maximum_panel_count() const
 {
     return 1;
 }
 
-unsigned PlaylistTabs::get_panel_count() const
+size_t PlaylistTabs::get_panel_count() const
 {
     return m_child_guid != pfc::guid_null ? 1 : 0;
 }
 
-void PlaylistTabs::replace_panel(unsigned index, const uie::splitter_item_t* p_item)
+void PlaylistTabs::replace_panel(size_t index, const uie::splitter_item_t* p_item)
 {
     if (index == 0 && m_child_guid != pfc::guid_null) {
         if (initialised)
@@ -540,7 +573,7 @@ void PlaylistTabs::replace_panel(unsigned index, const uie::splitter_item_t* p_i
     }
 }
 
-void PlaylistTabs::remove_panel(unsigned index)
+void PlaylistTabs::remove_panel(size_t index)
 {
     if (index == 0 && m_child_guid != pfc::guid_null) {
         if (initialised)
@@ -554,7 +587,7 @@ void PlaylistTabs::remove_panel(unsigned index)
     }
 }
 
-void PlaylistTabs::insert_panel(unsigned index, const uie::splitter_item_t* p_item)
+void PlaylistTabs::insert_panel(size_t index, const uie::splitter_item_t* p_item)
 {
     if (index == 0 && m_child_guid == pfc::guid_null) {
         if (initialised)
@@ -618,17 +651,18 @@ void PlaylistTabs::adjust_rect(bool b_larger, RECT* rc)
 
 void PlaylistTabs::reset_size_limits()
 {
+    constexpr auto max_value = static_cast<long>(USHRT_MAX);
     memset(&mmi, 0, sizeof(mmi));
     if (m_child_wnd) {
         mmi.ptMinTrackSize.x = 0;
         mmi.ptMinTrackSize.y = 0;
-        mmi.ptMaxTrackSize.x = MAXLONG;
-        mmi.ptMaxTrackSize.y = MAXLONG;
+        mmi.ptMaxTrackSize.x = max_value;
+        mmi.ptMaxTrackSize.y = max_value;
         SendMessage(m_child_wnd, WM_GETMINMAXINFO, 0, (LPARAM)&mmi);
-        if (mmi.ptMinTrackSize.x != 0 || mmi.ptMinTrackSize.y != 0 || mmi.ptMaxTrackSize.x != MAXLONG
-            || mmi.ptMaxTrackSize.y != MAXLONG) {
+        if (mmi.ptMinTrackSize.x != 0 || mmi.ptMinTrackSize.y != 0 || mmi.ptMaxTrackSize.x < max_value
+            || mmi.ptMaxTrackSize.y < max_value) {
             RECT rc_min = {0, 0, mmi.ptMinTrackSize.x, mmi.ptMinTrackSize.y};
-            RECT rc_max = {0, 0, mmi.ptMaxTrackSize.x, mmi.ptMaxTrackSize.y};
+            RECT rc_max = {0, 0, std::min(mmi.ptMaxTrackSize.x, max_value), std::min(mmi.ptMaxTrackSize.y, max_value)};
             if (wnd_tabs) {
                 adjust_rect(TRUE, &rc_min);
                 adjust_rect(TRUE, &rc_max);
@@ -674,60 +708,56 @@ void PlaylistTabs::set_styles(bool visible /*= true*/)
         long flags = WS_CHILD | TCS_HOTTRACK | TCS_TABS
             | ((cfg_tabs_multiline && (TabCtrl_GetItemCount(wnd_tabs) > 1)) ? TCS_MULTILINE | TCS_RIGHTJUSTIFY
                                                                             : TCS_SINGLELINE)
-            | (visible ? WS_VISIBLE : 0) | WS_CLIPSIBLINGS | WS_TABSTOP | 0;
+            | (visible ? WS_VISIBLE : 0) | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_TABSTOP;
 
         if (GetWindowLongPtr(wnd_tabs, GWL_STYLE) != flags)
             SetWindowLongPtr(wnd_tabs, GWL_STYLE, flags);
     }
 }
 
-void PlaylistTabs::on_playlist_locked(unsigned int, bool) {}
+void PlaylistTabs::on_playlist_locked(size_t, bool) {}
 
-void PlaylistTabs::on_playback_order_changed(unsigned int) {}
+void PlaylistTabs::on_playback_order_changed(size_t) {}
 
 void PlaylistTabs::on_default_format_changed() {}
 
-void PlaylistTabs::on_playlists_removing(const bit_array&, unsigned int, unsigned int) {}
+void PlaylistTabs::on_playlists_removing(const bit_array&, size_t, size_t) {}
 
-void PlaylistTabs::on_item_ensure_visible(unsigned int, unsigned int) {}
+void PlaylistTabs::on_item_ensure_visible(size_t, size_t) {}
 
-void PlaylistTabs::on_items_replaced(
-    unsigned int, const bit_array&, const pfc::list_base_const_t<t_on_items_replaced_entry>&)
+void PlaylistTabs::on_items_replaced(size_t, const bit_array&, const pfc::list_base_const_t<t_on_items_replaced_entry>&)
 {
 }
 
-void PlaylistTabs::on_items_modified_fromplayback(unsigned int, const bit_array&, play_control::t_display_level) {}
+void PlaylistTabs::on_items_modified_fromplayback(size_t, const bit_array&, play_control::t_display_level) {}
 
-void PlaylistTabs::on_items_modified(unsigned int, const bit_array&) {}
+void PlaylistTabs::on_items_modified(size_t, const bit_array&) {}
 
-void PlaylistTabs::on_item_focus_change(unsigned int, unsigned int, unsigned int) {}
+void PlaylistTabs::on_item_focus_change(size_t, size_t, size_t) {}
 
-void PlaylistTabs::on_items_selection_change(unsigned int, const bit_array&, const bit_array&) {}
+void PlaylistTabs::on_items_selection_change(size_t, const bit_array&, const bit_array&) {}
 
-void PlaylistTabs::on_items_reordered(unsigned int, const unsigned int*, unsigned int) {}
+void PlaylistTabs::on_items_reordered(size_t, const size_t*, size_t) {}
 
-void PlaylistTabs::on_items_added(
-    unsigned int, unsigned int, const pfc::list_base_const_t<metadb_handle_ptr>&, const bit_array&)
-{
-}
+void PlaylistTabs::on_items_added(size_t, size_t, const pfc::list_base_const_t<metadb_handle_ptr>&, const bit_array&) {}
 
-void PlaylistTabs::on_playlist_renamed(unsigned p_index, const char* p_new_name, unsigned p_new_name_len)
+void PlaylistTabs::on_playlist_renamed(size_t p_index, const char* p_new_name, size_t p_new_name_len)
 {
     if (wnd_tabs) {
-        uTabCtrl_InsertItemText(wnd_tabs, p_index, pfc::string8(p_new_name, p_new_name_len), false);
+        uTabCtrl_InsertItemText(wnd_tabs, gsl::narrow<int>(p_index), pfc::string8(p_new_name, p_new_name_len), false);
         if (cfg_tabs_multiline)
             on_size();
     }
 }
 
-void PlaylistTabs::on_playlists_removed(const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count)
+void PlaylistTabs::on_playlists_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count)
 {
     bool need_move = false;
 
     if (create_tabs())
         need_move = true;
     else if (wnd_tabs) {
-        unsigned n = p_old_count;
+        auto n = p_old_count;
         for (; n > 0; n--) {
             if (p_mask[n - 1])
                 TabCtrl_DeleteItem(wnd_tabs, n - 1);
@@ -742,10 +772,10 @@ void PlaylistTabs::on_playlists_removed(const bit_array& p_mask, unsigned p_old_
         on_size();
 }
 
-void PlaylistTabs::on_playlist_created(unsigned p_index, const char* p_name, unsigned p_name_len)
+void PlaylistTabs::on_playlist_created(size_t p_index, const char* p_name, size_t p_name_len)
 {
     if (wnd_tabs) {
-        uTabCtrl_InsertItemText(wnd_tabs, p_index, pfc::string8(p_name, p_name_len));
+        uTabCtrl_InsertItemText(wnd_tabs, gsl::narrow<int>(p_index), pfc::string8(p_name, p_name_len));
         set_styles();
         if (cfg_tabs_multiline)
             on_size();
@@ -753,26 +783,26 @@ void PlaylistTabs::on_playlist_created(unsigned p_index, const char* p_name, uns
         on_size();
 }
 
-void PlaylistTabs::on_playlists_reorder(const unsigned* p_order, unsigned p_count)
+void PlaylistTabs::on_playlists_reorder(const size_t* p_order, size_t p_count)
 {
     if (wnd_tabs) {
-        static_api_ptr_t<playlist_manager> playlist_api;
-        int sel = playlist_api->get_active_playlist();
+        const auto playlist_api = playlist_manager::get();
+        const auto sel = playlist_api->get_active_playlist();
 
-        for (unsigned n = 0; n < p_count; n++) {
-            if (n != (unsigned)p_order[n]) {
+        for (size_t n = 0; n < p_count; n++) {
+            if (n != p_order[n]) {
                 pfc::string8 temp;
                 pfc::string8 temp2;
                 playlist_api->playlist_get_name(n, temp);
 
-                uTabCtrl_InsertItemText(wnd_tabs, n, temp, false);
+                uTabCtrl_InsertItemText(wnd_tabs, gsl::narrow<int>(n), temp, false);
             }
         }
         TabCtrl_SetCurSel(wnd_tabs, sel);
     }
 }
 
-void PlaylistTabs::on_playlist_activate(unsigned p_old, unsigned p_new)
+void PlaylistTabs::on_playlist_activate(size_t p_old, size_t p_new)
 {
     if (wnd_tabs) {
         TabCtrl_SetCurSel(wnd_tabs, p_new);
@@ -780,33 +810,27 @@ void PlaylistTabs::on_playlist_activate(unsigned p_old, unsigned p_new)
 }
 
 void FB2KAPI PlaylistTabs::on_items_removed(
-    unsigned p_playlist, const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count)
+    size_t p_playlist, const bit_array& p_mask, size_t p_old_count, size_t p_new_count)
 {
 }
 
 void FB2KAPI PlaylistTabs::on_items_removing(
-    unsigned p_playlist, const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count)
+    size_t p_playlist, const bit_array& p_mask, size_t p_old_count, size_t p_new_count)
 {
-}
-
-PlaylistTabs::class_data& PlaylistTabs::get_class_data() const
-{
-    __implement_get_class_data_ex(_T("{ABB72D0D-DBF0-4bba-8C68-3357EBE07A4D}"), _T(""), false, 0,
-        WS_CHILD | WS_CLIPCHILDREN, WS_EX_CONTROLPARENT, CS_DBLCLKS);
 }
 
 void g_on_autohide_tabs_change()
 {
-    unsigned count = PlaylistTabs::list_wnd.get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = PlaylistTabs::list_wnd.get_count();
+    for (size_t n = 0; n < count; n++) {
         PlaylistTabs::list_wnd[n]->create_tabs();
     }
 }
 
 void g_on_multiline_tabs_change()
 {
-    unsigned count = PlaylistTabs::list_wnd.get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = PlaylistTabs::list_wnd.get_count();
+    for (size_t n = 0; n < count; n++) {
         PlaylistTabs* p_tabs = PlaylistTabs::list_wnd[n];
         p_tabs->set_styles();
         p_tabs->on_size();
@@ -845,7 +869,7 @@ void PlaylistTabs::WindowHost::relinquish_ownership(HWND wnd)
 
 bool PlaylistTabs::WindowHost::override_status_text_create(service_ptr_t<ui_status_text_override>& p_out)
 {
-    static_api_ptr_t<ui_control> api;
+    const auto api = ui_control::get();
     return m_this->get_host()->override_status_text_create(p_out);
 }
 

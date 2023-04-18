@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "item_properties.h"
 
 namespace cui::panels::item_properties {
@@ -45,8 +45,6 @@ cfg_uint cfg_selection_properties_info_sections(g_guid_selection_poperties_info_
 cfg_bool cfg_selection_poperties_show_column_titles(g_guid_selection_poperties_show_column_titles, true);
 cfg_bool cfg_selection_poperties_show_group_titles(g_guid_selection_poperties_show_group_titles, true);
 
-ItemProperties::MessageWindow ItemProperties::g_message_window;
-
 std::vector<ItemProperties*> ItemProperties::g_windows;
 
 // {862F8A37-16E0-4a74-B27E-2B73DB567D0F}
@@ -70,30 +68,12 @@ void ItemProperties::s_on_dark_mode_status_change()
         window->set_use_dark_mode(is_dark);
 }
 
-ItemProperties::MessageWindow::class_data& ItemProperties::MessageWindow::get_class_data() const
-{
-    __implement_get_class_data_ex(_T("{9D0A0408-59AC-4a96-A3EF-FF26B7B7C118}"), _T(""), false, 0, 0, 0, 0);
-}
-
-LRESULT ItemProperties::MessageWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_CREATE:
-        break;
-    case WM_ACTIVATEAPP:
-        g_on_app_activate(wp != 0);
-        break;
-    case WM_DESTROY:
-        break;
-    }
-    return DefWindowProc(wnd, msg, wp, lp);
-}
-
 void ItemProperties::g_on_app_activate(bool b_activated)
 {
     for (auto& window : g_windows)
         window->on_app_activate(b_activated);
 }
+
 void ItemProperties::on_app_activate(bool b_activated)
 {
     if (b_activated) {
@@ -121,23 +101,22 @@ unsigned ItemProperties::get_type() const
     return uie::type_panel;
 }
 
-void ItemProperties::set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void ItemProperties::set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     if (!p_size)
         return;
 
-    t_size version;
-    p_reader->read_lendian_t(version, p_abort);
+    const auto version = p_reader->read_lendian_t<uint32_t>(p_abort);
 
     if (version > config_version_current)
         return;
 
-    t_size field_count;
+    uint32_t field_count;
     p_reader->read_lendian_t(field_count, p_abort);
     m_fields.remove_all();
     m_fields.set_count(field_count);
 
-    for (t_size i = 0; i < field_count; i++) {
+    for (uint32_t i = 0; i < field_count; i++) {
         p_reader->read_string(m_fields[i].m_name_friendly, p_abort);
         p_reader->read_string(m_fields[i].m_name, p_abort);
     }
@@ -169,10 +148,10 @@ void ItemProperties::set_config(stream_reader* p_reader, t_size p_size, abort_ca
 
 void ItemProperties::get_config(stream_writer* p_writer, abort_callback& p_abort) const
 {
-    p_writer->write_lendian_t(t_size(config_version_current), p_abort);
-    t_size count = m_fields.get_count();
-    p_writer->write_lendian_t(count, p_abort);
-    for (t_size i = 0; i < count; i++) {
+    p_writer->write_lendian_t(static_cast<uint32_t>(config_version_current), p_abort);
+    size_t count = m_fields.get_count();
+    p_writer->write_lendian_t(gsl::narrow<uint32_t>(count), p_abort);
+    for (size_t i = 0; i < count; i++) {
         p_writer->write_string(m_fields[i].m_name_friendly, p_abort);
         p_writer->write_string(m_fields[i].m_name, p_abort);
     }
@@ -195,11 +174,11 @@ void ItemProperties::notify_on_initialisation()
     set_use_dark_mode(colours::is_dark_mode_active());
     set_autosize(m_autosizing_columns);
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_items_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_items_font_client, lf);
     set_font(&lf);
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_header_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_header_font_client, lf);
     set_header_font(&lf);
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_group_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_group_font_client, lf);
     set_group_font(&lf);
     set_edge_style(m_edge_style);
     set_show_header(m_show_column_titles);
@@ -211,34 +190,36 @@ void ItemProperties::notify_on_create()
     set_group_count(m_show_group_titles ? 1 : 0);
 
     register_callback();
-    static_api_ptr_t<play_callback_manager>()->register_callback(
-        this, flag_on_playback_stop | flag_on_playback_new_track, true);
-    static_api_ptr_t<metadb_io_v3>()->register_callback(this);
+    play_callback_manager::get()->register_callback(this, flag_on_playback_stop | flag_on_playback_new_track, true);
+    metadb_io_v3::get()->register_callback(this);
     refresh_contents();
 
     if (g_windows.empty())
-        g_message_window.create(nullptr);
+        s_create_message_window();
+
     g_windows.push_back(this);
 }
 void ItemProperties::notify_on_destroy()
 {
     std::erase(g_windows, this);
     if (g_windows.empty())
-        g_message_window.destroy();
+        s_destroy_message_window();
 
-    static_api_ptr_t<play_callback_manager>()->unregister_callback(this);
-    static_api_ptr_t<metadb_io_v3>()->unregister_callback(this);
+    play_callback_manager::get()->unregister_callback(this);
+    metadb_io_v3::get()->unregister_callback(this);
     deregister_callback();
     m_handles.remove_all();
     m_selection_handles.remove_all();
     m_edit_handles.remove_all();
     m_selection_holder.release();
+    m_library_autocomplete_v1.reset();
+    m_library_autocomplete_v2.reset();
 }
 
 void ItemProperties::notify_on_set_focus(HWND wnd_lost)
 {
     deregister_callback();
-    m_selection_holder = static_api_ptr_t<ui_selection_manager>()->acquire();
+    m_selection_holder = ui_selection_manager::get()->acquire();
     m_selection_holder->set_selection(m_handles);
 }
 void ItemProperties::notify_on_kill_focus(HWND wnd_receiving)
@@ -256,7 +237,7 @@ void ItemProperties::register_callback()
 void ItemProperties::deregister_callback()
 {
     if (m_callback_registered)
-        static_api_ptr_t<ui_selection_manager>()->unregister_callback(this);
+        ui_selection_manager::get()->unregister_callback(this);
     m_callback_registered = false;
 }
 
@@ -267,14 +248,14 @@ public:
         if (m_truncated)
             return false;
 
-        const t_size field_index = info->meta_find(field);
+        const size_t field_index = info->meta_find(field);
 
         if (field_index == (std::numeric_limits<size_t>::max)()) {
             m_some_values_missing = true;
             return true;
         }
 
-        const t_size value_count = info->meta_enum_value_count(field_index);
+        const size_t value_count = info->meta_enum_value_count(field_index);
 
         for (auto value_index : ranges::views::iota(size_t{0}, value_count)) {
             const auto value = info->meta_enum_value(field_index, value_index);
@@ -403,19 +384,43 @@ private:
     bool m_include_unknown_sections{};
 };
 
-template <class Container>
-class TrackPropertyInfoSourceProvider : public track_property_provider_v3_info_source {
+class TrackPropertyInfoSourceProviderV3 : public track_property_provider_v3_info_source {
 public:
-    TrackPropertyInfoSourceProvider(Container& items) : m_items(items) {}
-    metadb_info_container::ptr get_info(size_t index) override { return m_items[index]; }
+    TrackPropertyInfoSourceProviderV3(
+        const std::vector<metadb_v2_rec_t>& recs, const std::vector<metadb_info_container::ptr>& info_refs)
+        : m_recs(recs)
+        , m_info_refs(info_refs)
+    {
+    }
+
+    metadb_info_container::ptr get_info(size_t index) override
+    {
+        auto info_ref = m_recs.empty() ? m_info_refs[index] : m_recs[index].info;
+
+        if (!info_ref.is_valid())
+            return m_dummy_info_ref;
+
+        return info_ref;
+    }
 
 private:
-    Container& m_items;
+    metadb_info_container::ptr m_dummy_info_ref{fb2k::service_new<metadb_info_container_const_impl>()};
+    const std::vector<metadb_v2_rec_t>& m_recs;
+    const std::vector<metadb_info_container::ptr>& m_info_refs;
+};
+
+class TrackPropertyInfoSourceProviderV5 : public track_property_provider_v5_info_source {
+public:
+    explicit TrackPropertyInfoSourceProviderV5(const std::vector<metadb_v2_rec_t>& recs) : m_recs(recs) {}
+    metadb_v2_rec_t get_info(size_t index) override { return m_recs[index]; }
+
+private:
+    const std::vector<metadb_v2_rec_t>& m_recs;
 };
 
 decltype(std::declval<TrackPropertyCallback>().to_sorted_vector()) get_track_properties(
-    const std::vector<metadb_info_container::ptr>& info_refs, const std::vector<std::string>& info_sections,
-    bool include_unknown_sections, const metadb_handle_list& tracks)
+    const std::vector<metadb_v2_rec_t>& recs, const std::vector<metadb_info_container::ptr>& info_refs,
+    const std::vector<std::string>& info_sections, bool include_unknown_sections, const metadb_handle_list& tracks)
 {
     if (!tracks.get_count())
         return {};
@@ -437,11 +442,12 @@ decltype(std::declval<TrackPropertyCallback>().to_sorted_vector()) get_track_pro
             main_thread_providers.emplace_back(std::move(enumerator_value));
     }
 
-    TrackPropertyInfoSourceProvider info_source(info_refs);
+    TrackPropertyInfoSourceProviderV3 info_source_v3(recs, info_refs);
+    TrackPropertyInfoSourceProviderV5 info_source_v5(recs);
 
     for (auto&& provider : main_thread_providers) {
         if (track_property_provider_v3::ptr provider_v3; provider->service_query_t(provider_v3)) {
-            provider_v3->enumerate_properties_v3(tracks, info_source, props);
+            provider_v3->enumerate_properties_v3(tracks, info_source_v3, props);
         } else if (track_property_provider_v2::ptr provider_v2; provider->service_query_t(provider_v2)) {
             provider_v2->enumerate_properties_v2(tracks, props);
         } else {
@@ -449,10 +455,18 @@ decltype(std::declval<TrackPropertyCallback>().to_sorted_vector()) get_track_pro
         }
     }
 
-    concurrency::parallel_for(
-        size_t{0}, thread_safe_providers.size(), [&thread_safe_providers, &props, &info_source, &tracks](auto&& index) {
+    concurrency::parallel_for(size_t{0}, thread_safe_providers.size(),
+        [&thread_safe_providers, &props, &info_source_v3, &info_source_v5, &tracks, has_recs{!recs.empty()}](
+            auto&& index) {
             auto&& provider = thread_safe_providers[index];
-            provider->enumerate_properties_v4(tracks, info_source, props, fb2k::noAbort);
+
+            track_property_provider_v5::ptr provider_v5;
+            if (has_recs && (provider_v5 &= provider)) {
+                provider_v5->enumerate_properties_v5(tracks, info_source_v5, props, fb2k::noAbort);
+                return;
+            }
+
+            provider->enumerate_properties_v4(tracks, info_source_v3, props, fb2k::noAbort);
         });
 
     return props.to_sorted_vector();
@@ -468,27 +482,43 @@ void ItemProperties::refresh_contents()
     metadata_aggregators.resize(field_count);
 
     pfc::list_t<InsertItem> items;
-    t_size i;
-    t_size count = m_handles.get_count();
+    size_t count = m_handles.get_count();
 
+    std::vector<metadb_v2_rec_t> recs;
     std::vector<metadb_info_container::ptr> info_refs;
-    info_refs.resize(count);
 
-    for (i = 0; i < count; i++)
-        info_refs[i] = m_handles[i]->get_info_ref();
+    const auto metadb_v2_api = metadb_v2::tryGet();
 
-    concurrency::parallel_for(size_t{0}, field_count, [&metadata_aggregators, &info_refs, this](auto&& field_index) {
-        auto& metadata_aggregator = metadata_aggregators[field_index];
+    const auto has_metadb_v2 = metadb_v2_api.is_valid();
 
-        for (size_t i = 0; i < m_handles.get_count(); i++) {
-            auto&& info_ref = info_refs[i];
+    if (has_metadb_v2) {
+        recs.resize(count);
 
-            if (!metadata_aggregator.process_file_info(m_fields[field_index].m_name, &info_ref->info()))
-                break;
-        }
-    });
+        metadb_v2_api->queryMultiParallel_(
+            m_handles, [&recs, &info_refs](size_t index, const metadb_v2_rec_t& rec) { recs[index] = rec; });
+    } else {
+        info_refs.resize(count);
 
-    for (i = 0; i < field_count; i++) {
+        for (size_t i{}; i < count; i++)
+            info_refs[i] = m_handles[i]->get_info_ref();
+    }
+
+    file_info_const_impl dummy_file_info;
+
+    concurrency::parallel_for(size_t{0}, field_count,
+        [&metadata_aggregators, &info_refs, &recs, &dummy_file_info, has_metadb_v2, this](auto&& field_index) {
+            auto& metadata_aggregator = metadata_aggregators[field_index];
+
+            for (size_t i = 0; i < m_handles.get_count(); i++) {
+                auto& info_ref = has_metadb_v2 ? recs[i].info : info_refs[i];
+                auto& info = info_ref.is_valid() ? info_ref->info() : dummy_file_info;
+
+                if (!metadata_aggregator.process_file_info(m_fields[field_index].m_name, &info))
+                    break;
+            }
+        });
+
+    for (size_t i{}; i < field_count; i++) {
         auto& field = m_fields[i];
         auto& aggregator = metadata_aggregators[i];
 
@@ -497,9 +527,9 @@ void ItemProperties::refresh_contents()
         item.m_subitems[0] = field.m_name_friendly;
         temp.reset();
 
-        t_size count_values = aggregator.m_values.size();
+        size_t count_values = aggregator.m_values.size();
 
-        for (t_size j = 0; j < count_values; j++) {
+        for (size_t j = 0; j < count_values; j++) {
             auto&& value = aggregator.m_values[j];
 
             if (value.length() > 0)
@@ -534,7 +564,7 @@ void ItemProperties::refresh_contents()
         }
     }
 
-    auto track_properties = get_track_properties(info_refs, info_sections, include_unknown_sections, m_handles);
+    auto track_properties = get_track_properties(recs, info_refs, info_sections, include_unknown_sections, m_handles);
 
     for (auto&& [section, values] : track_properties) {
         for (auto&& value : values) {
@@ -546,8 +576,8 @@ void ItemProperties::refresh_contents()
         }
     }
 
-    t_size old_count = get_item_count();
-    t_size new_count = items.get_count();
+    size_t old_count = get_item_count();
+    size_t new_count = items.get_count();
 
     if (new_count && old_count) {
         pfc::list_t<InsertItem> items_replace;
@@ -591,9 +621,9 @@ void ItemProperties::on_changed_sorted(metadb_handle_list_cref p_items_sorted, b
 {
     if (!p_fromhook) {
         bool b_refresh = false;
-        t_size count = m_handles.get_count();
-        for (t_size i = 0; i < count && !b_refresh; i++) {
-            t_size index = pfc_infinite;
+        size_t count = m_handles.get_count();
+        for (size_t i = 0; i < count && !b_refresh; i++) {
+            size_t index = pfc_infinite;
             if (p_items_sorted.bsearch_t(pfc::compare_t<metadb_handle_ptr, metadb_handle_ptr>, m_handles[i], index))
                 b_refresh = true;
         }
@@ -623,7 +653,7 @@ void ItemProperties::on_selection_changed(const pfc::list_base_const_t<metadb_ha
             m_selection_handles = p_selection;
 
         if (m_tracking_mode == track_nowplaying
-            || (m_tracking_mode == track_automatic && static_api_ptr_t<play_control>()->is_playing()))
+            || (m_tracking_mode == track_automatic && play_control::get()->is_playing()))
             return;
 
         m_handles = m_selection_handles;
@@ -635,12 +665,12 @@ void ItemProperties::on_tracking_mode_change()
 {
     m_handles.remove_all();
     if (m_tracking_mode == track_selection
-        || (m_tracking_mode == track_automatic && !static_api_ptr_t<play_control>()->is_playing())) {
+        || (m_tracking_mode == track_automatic && !play_control::get()->is_playing())) {
         m_handles = m_selection_handles;
     } else if (m_tracking_mode == track_nowplaying
-        || (m_tracking_mode == track_automatic && static_api_ptr_t<play_control>()->is_playing())) {
+        || (m_tracking_mode == track_automatic && play_control::get()->is_playing())) {
         metadb_handle_ptr item;
-        if (static_api_ptr_t<playback_control>()->get_now_playing(item))
+        if (playback_control::get()->get_now_playing(item))
             m_handles.add_item(item);
     }
     refresh_contents();
@@ -678,7 +708,7 @@ public:
 void ItemProperties::g_on_font_items_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_items_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_items_font_client, lf);
     for (auto& window : g_windows) {
         window->set_font(&lf);
     }
@@ -687,7 +717,7 @@ void ItemProperties::g_on_font_items_change()
 void ItemProperties::g_on_font_groups_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_group_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_group_font_client, lf);
     for (auto& window : g_windows) {
         window->set_group_font(&lf);
     }
@@ -696,7 +726,7 @@ void ItemProperties::g_on_font_groups_change()
 void ItemProperties::g_on_font_header_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_selection_properties_header_font_client, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_selection_properties_header_font_client, lf);
     for (auto& window : g_windows) {
         window->set_header_font(&lf);
     }
@@ -726,9 +756,30 @@ ItemProperties::ItemProperties()
     m_fields.add_item(Field("Comment", "COMMENT"));
 }
 
+void ItemProperties::s_create_message_window()
+{
+    uie::container_window_v3_config config(L"{9D0A0408-59AC-4a96-A3EF-FF26B7B7C118}", false);
+    config.window_styles = 0;
+    config.extended_window_styles = 0;
+
+    s_message_window = std::make_unique<uie::container_window_v3>(
+        config, [](auto&& wnd, auto&& msg, auto&& wp, auto&& lp) -> LRESULT {
+            if (msg == WM_ACTIVATEAPP)
+                g_on_app_activate(wp != 0);
+            return DefWindowProc(wnd, msg, wp, lp);
+        });
+    s_message_window->create(nullptr);
+}
+
+void ItemProperties::s_destroy_message_window()
+{
+    s_message_window->destroy();
+    s_message_window.reset();
+}
+
 void ItemProperties::notify_save_inline_edit(const char* value)
 {
-    static_api_ptr_t<metadb_io_v2> tagger_api;
+    const auto tagger_api = metadb_io_v2::get();
     if (strcmp(value, "<mixed values>") != 0) {
         pfc::list_t<pfc::string8> values;
         const char* ptr = value;
@@ -742,17 +793,17 @@ void ItemProperties::notify_save_inline_edit(const char* value)
                 ptr++;
         }
 
-        t_size value_count = values.get_count();
+        size_t value_count = values.get_count();
 
         metadb_handle_list ptrs(m_edit_handles);
         pfc::list_t<file_info_impl> infos;
         pfc::list_t<bool> mask;
         pfc::list_t<const file_info*> infos_ptr;
-        t_size count = ptrs.get_count();
+        size_t count = ptrs.get_count();
         mask.set_count(count);
         infos.set_count(count);
         // infos.set_count(count);
-        for (t_size i = 0; i < count; i++) {
+        for (size_t i = 0; i < count; i++) {
             assert(ptrs[i].is_valid());
             mask[i] = !ptrs[i]->get_info(infos[i]);
             infos_ptr.add_item(&infos[i]);
@@ -761,7 +812,7 @@ void ItemProperties::notify_save_inline_edit(const char* value)
                 g_print_field(m_edit_field, infos[i], old_value);
                 if (!(mask[i] = !((strcmp(old_value, value))))) {
                     infos[i].meta_remove_field(m_edit_field);
-                    for (t_size j = 0; j < value_count; j++)
+                    for (size_t j = 0; j < value_count; j++)
                         infos[i].meta_add(m_edit_field, values[j]);
                 }
             }
@@ -792,58 +843,75 @@ void ItemProperties::notify_save_inline_edit(const char* value)
     m_edit_handles.remove_all();
 }
 
-bool ItemProperties::notify_create_inline_edit(const pfc::list_base_const_t<t_size>& indices, unsigned column,
-    pfc::string_base& p_text, t_size& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries)
+bool ItemProperties::notify_create_inline_edit(const pfc::list_base_const_t<size_t>& indices, size_t column,
+    pfc::string_base& p_text, size_t& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries)
 {
-    t_size indices_count = indices.get_count();
-    if (m_handles.get_count() && column == 1 && indices_count == 1 && indices[0] < m_fields.get_count()) {
-        m_edit_index = indices[0];
-        m_edit_column = column;
-        m_edit_field = m_fields[m_edit_index].m_name;
-        m_edit_handles = m_handles;
+    const size_t indices_count = indices.get_count();
 
-        pfc::string8_fast_aggressive text;
-        pfc::string8_fast_aggressive temp;
-        {
-            metadb_info_container::ptr p_info;
-            if (m_edit_handles[0]->get_info_ref(p_info))
-                g_print_field(m_edit_field, p_info->info(), text);
-            t_size count = m_handles.get_count();
-            for (t_size i = 1; i < count; i++) {
-                temp.reset();
-                if (m_edit_handles[i]->get_info_ref(p_info))
-                    g_print_field(m_edit_field, p_info->info(), temp);
-                if (strcmp(temp, text) != 0) {
-                    text = "<mixed values>";
-                    break;
-                }
+    if (m_handles.get_count() == 0 || column != 1 || indices_count != 1 || indices[0] >= m_fields.get_count())
+        return false;
+
+    m_edit_index = indices[0];
+    m_edit_column = column;
+    m_edit_field = m_fields[m_edit_index].m_name;
+    m_edit_handles = m_handles;
+
+    if (m_library_autocomplete_v2.is_empty() && m_library_autocomplete_v1.is_empty()) {
+        if (!library_meta_autocomplete_v2::tryGet(m_library_autocomplete_v2)) {
+            m_library_autocomplete_v1 = library_meta_autocomplete::get();
+        }
+    }
+
+    p_flags |= inline_edit_autocomplete;
+    pfc::com_ptr_t<IUnknown> autocomplete_entries;
+
+    if (m_library_autocomplete_v2.is_valid())
+        m_library_autocomplete_v2->get_value_list_async(m_edit_field, autocomplete_entries);
+    else
+        m_library_autocomplete_v1->get_value_list(m_edit_field, autocomplete_entries);
+
+    pAutocompleteEntries = autocomplete_entries.get_ptr();
+
+    pfc::string8_fast_aggressive text;
+    pfc::string8_fast_aggressive temp;
+    {
+        metadb_info_container::ptr p_info;
+        if (m_edit_handles[0]->get_info_ref(p_info))
+            g_print_field(m_edit_field, p_info->info(), text);
+        size_t count = m_handles.get_count();
+        for (size_t i = 1; i < count; i++) {
+            temp.reset();
+            if (m_edit_handles[i]->get_info_ref(p_info))
+                g_print_field(m_edit_field, p_info->info(), temp);
+            if (strcmp(temp, text) != 0) {
+                text = "<mixed values>";
+                break;
             }
         }
-
-        p_text = text;
-
-        return true;
     }
-    return false;
+
+    p_text = text;
+
+    return true;
 }
 
 void ItemProperties::g_print_field(const char* field, const file_info& p_info, pfc::string_base& p_out)
 {
-    t_size meta_index = p_info.meta_find(field);
+    size_t meta_index = p_info.meta_find(field);
     if (meta_index != pfc_infinite) {
-        t_size count = p_info.meta_enum_value_count(meta_index);
-        for (t_size i = 0; i < count; i++)
+        size_t count = p_info.meta_enum_value_count(meta_index);
+        for (size_t i = 0; i < count; i++)
             p_out << p_info.meta_enum_value(meta_index, i) << (i + 1 < count ? "; " : "");
     }
 }
 
 bool ItemProperties::notify_before_create_inline_edit(
-    const pfc::list_base_const_t<t_size>& indices, unsigned column, bool b_source_mouse)
+    const pfc::list_base_const_t<size_t>& indices, size_t column, bool b_source_mouse)
 {
     return m_handles.get_count() && column == 1 && indices.get_count() == 1 && indices[0] < m_fields.get_count();
 }
 
-void ItemProperties::notify_on_column_size_change(t_size index, int new_width)
+void ItemProperties::notify_on_column_size_change(size_t index, int new_width)
 {
     if (index == 0)
         m_column_name_width = new_width;
@@ -927,12 +995,12 @@ ItemProperties::MenuNodeSourcePopup::MenuNodeSourcePopup(ItemProperties* p_wnd)
     m_items.add_item(new MenuNodeTrackMode(p_wnd, 1));
 }
 
-void ItemProperties::MenuNodeSourcePopup::get_child(unsigned p_index, uie::menu_node_ptr& p_out) const
+void ItemProperties::MenuNodeSourcePopup::get_child(size_t p_index, uie::menu_node_ptr& p_out) const
 {
     p_out = m_items[p_index].get_ptr();
 }
 
-unsigned ItemProperties::MenuNodeSourcePopup::get_children_count() const
+size_t ItemProperties::MenuNodeSourcePopup::get_children_count() const
 {
     return m_items.get_count();
 }
@@ -964,7 +1032,7 @@ bool ItemProperties::ModeNodeAutosize::get_display_data(pfc::string_base& p_out,
     return true;
 }
 
-ItemProperties::MenuNodeTrackMode::MenuNodeTrackMode(ItemProperties* p_wnd, t_size p_value)
+ItemProperties::MenuNodeTrackMode::MenuNodeTrackMode(ItemProperties* p_wnd, uint32_t p_value)
     : p_this(p_wnd)
     , m_source(p_value)
 {
@@ -989,7 +1057,7 @@ bool ItemProperties::MenuNodeTrackMode::get_display_data(pfc::string_base& p_out
     return true;
 }
 
-const char* ItemProperties::MenuNodeTrackMode::get_name(t_size source)
+const char* ItemProperties::MenuNodeTrackMode::get_name(uint32_t source)
 {
     if (source == track_nowplaying)
         return "Playing item";
@@ -1000,12 +1068,12 @@ const char* ItemProperties::MenuNodeTrackMode::get_name(t_size source)
     return "";
 }
 
-void ItemPropertiesColoursClient::on_colour_changed(t_size mask) const
+void ItemPropertiesColoursClient::on_colour_changed(uint32_t mask) const
 {
     ItemProperties::g_redraw_all();
 }
 
-void ItemPropertiesColoursClient::on_bool_changed(t_size mask) const
+void ItemPropertiesColoursClient::on_bool_changed(uint32_t mask) const
 {
     if (mask & colours::bool_flag_dark_mode_enabled)
         ItemProperties::s_on_dark_mode_status_change();

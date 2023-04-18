@@ -1,4 +1,4 @@
-#include "../stdafx.h"
+#include "pch.h"
 #include "ng_playlist.h"
 
 namespace cui::panels::playlist_view {
@@ -59,16 +59,16 @@ public:
 } // namespace
 
 bool PlaylistView::notify_before_create_inline_edit(
-    const pfc::list_base_const_t<t_size>& indices, unsigned column, bool b_source_mouse)
+    const pfc::list_base_const_t<size_t>& indices, size_t column, bool b_source_mouse)
 {
     return (!b_source_mouse || main_window::config_get_inline_metafield_edit_mode() != main_window::mode_disabled)
         && column < m_edit_fields.get_count() && strlen(m_edit_fields[column]);
 }
 
-bool PlaylistView::notify_create_inline_edit(const pfc::list_base_const_t<t_size>& indices, unsigned column,
-    pfc::string_base& p_text, t_size& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries)
+bool PlaylistView::notify_create_inline_edit(const pfc::list_base_const_t<size_t>& indices, size_t column,
+    pfc::string_base& p_text, size_t& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries)
 {
-    const t_size indices_count = indices.get_count();
+    const size_t indices_count = indices.get_count();
     m_edit_handles.remove_all();
     m_edit_handles.set_count(indices_count);
 
@@ -76,14 +76,14 @@ bool PlaylistView::notify_create_inline_edit(const pfc::list_base_const_t<t_size
 
     m_edit_field = m_edit_fields[column];
 
-    for (t_size i = 0; i < indices_count; i++) {
+    for (size_t i = 0; i < indices_count; i++) {
         if (!m_playlist_api->activeplaylist_get_item_handle(m_edit_handles[i], indices[i]))
             return false;
     }
 
     bool matching = true;
 
-    for (t_size i = 0; i < indices_count; i++) {
+    for (size_t i = 0; i < indices_count; i++) {
         metadb_info_container::ptr info_container = m_edit_handles[i]->get_info_ref();
 
         auto& info = info_container->info();
@@ -103,14 +103,22 @@ bool PlaylistView::notify_create_inline_edit(const pfc::list_base_const_t<t_size
         p_text = "<multiple values>";
     }
 
-    try {
-        library_meta_autocomplete::ptr p_library_autocomplete = standard_api_create_t<library_meta_autocomplete>();
-        p_flags |= inline_edit_autocomplete;
-        pfc::com_ptr_t<IUnknown> pUnk;
-        p_library_autocomplete->get_value_list(m_edit_field, pUnk);
-        pAutocompleteEntries = pUnk.get_ptr();
-    } catch (exception_service_not_found const&) {
+    if (m_library_autocomplete_v2.is_empty() && m_library_autocomplete_v1.is_empty()) {
+        if (!library_meta_autocomplete_v2::tryGet(m_library_autocomplete_v2)) {
+            m_library_autocomplete_v1 = library_meta_autocomplete::get();
+        }
     }
+
+    p_flags |= inline_edit_autocomplete;
+    pfc::com_ptr_t<IUnknown> autocomplete_entries;
+
+    if (m_library_autocomplete_v2.is_valid())
+        m_library_autocomplete_v2->get_value_list_async(m_edit_field, autocomplete_entries);
+    else
+        m_library_autocomplete_v1->get_value_list(m_edit_field, autocomplete_entries);
+
+    pAutocompleteEntries = autocomplete_entries.get_ptr();
+
     return true;
 }
 
@@ -134,7 +142,7 @@ void PlaylistView::notify_save_inline_edit(const char* value)
         offset = index + 1;
     }
 
-    static_api_ptr_t<metadb_io_v2> tagger_api;
+    const auto tagger_api = metadb_io_v2::get();
 
     const auto filter = fb2k::service_new<InlineEditFileInfoFilter>(m_edit_field.get_ptr(), values);
     tagger_api->update_info_async(m_edit_handles, filter, GetAncestor(get_wnd(), GA_ROOT),

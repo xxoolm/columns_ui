@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "artwork.h"
 #include "config.h"
@@ -23,22 +23,22 @@ enum TrackingMode {
     track_selection,
 };
 
-bool g_track_mode_includes_now_playing(t_size mode)
+bool g_track_mode_includes_now_playing(size_t mode)
 {
     return mode == track_auto_playlist_playing || mode == track_auto_selection_playing || mode == track_playing;
 }
 
-bool g_track_mode_includes_playlist(t_size mode)
+bool g_track_mode_includes_playlist(size_t mode)
 {
     return mode == track_auto_playlist_playing || mode == track_playlist;
 }
 
-bool g_track_mode_includes_auto(t_size mode)
+bool g_track_mode_includes_auto(size_t mode)
 {
     return mode == track_auto_playlist_playing || mode == track_auto_selection_playing;
 }
 
-bool g_track_mode_includes_selection(t_size mode)
+bool g_track_mode_includes_selection(size_t mode)
 {
     return mode == track_auto_selection_playing || mode == track_selection;
 }
@@ -56,10 +56,10 @@ const std::vector<GUID> g_artwork_types{
 void ArtworkPanel::get_config(stream_writer* p_writer, abort_callback& p_abort) const
 {
     p_writer->write_lendian_t(m_track_mode, p_abort);
-    p_writer->write_lendian_t((t_uint32)current_stream_version, p_abort);
+    p_writer->write_lendian_t(static_cast<uint32_t>(current_stream_version), p_abort);
     p_writer->write_lendian_t(m_preserve_aspect_ratio, p_abort);
     p_writer->write_lendian_t(m_lock_type, p_abort);
-    p_writer->write_lendian_t(m_selected_artwork_type_index, p_abort);
+    p_writer->write_lendian_t(gsl::narrow<uint32_t>(m_selected_artwork_type_index), p_abort);
 }
 
 void ArtworkPanel::get_menu_items(ui_extension::menu_hook_t& p_hook)
@@ -78,6 +78,20 @@ void ArtworkPanel::get_menu_items(ui_extension::menu_hook_t& p_hook)
 }
 
 ArtworkPanel::ArtworkPanel() : m_track_mode(cfg_track_mode), m_preserve_aspect_ratio(cfg_preserve_aspect_ratio) {}
+
+uie::container_window_v3_config ArtworkPanel::get_window_config()
+{
+    uie::container_window_v3_config config(L"columns_ui_artwork_view_VaODDnIsit0", false);
+
+    if (cfg_edge_style == 1)
+        config.extended_window_styles |= WS_EX_CLIENTEDGE;
+    else if (cfg_edge_style == 2)
+        config.extended_window_styles |= WS_EX_STATICEDGE;
+
+    config.class_cursor = IDC_HAND;
+
+    return config;
+}
 
 void ArtworkPanel::g_on_edge_style_change()
 {
@@ -146,18 +160,18 @@ LRESULT ArtworkPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         m_artwork_loader = std::make_shared<ArtworkReaderManager>();
         now_playing_album_art_notify_manager::get()->add(this);
         m_artwork_loader->set_types(g_artwork_types);
-        static_api_ptr_t<play_callback_manager>()->register_callback(
+        play_callback_manager::get()->register_callback(
             this, flag_on_playback_new_track | flag_on_playback_stop | flag_on_playback_edited, false);
-        static_api_ptr_t<playlist_manager_v3>()->register_callback(this, playlist_callback_flags);
+        playlist_manager_v3::get()->register_callback(this, playlist_callback_flags);
         g_ui_selection_manager_register_callback_no_now_playing_fallback(this);
         force_reload_artwork();
         g_windows.push_back(this);
     } break;
     case WM_DESTROY:
         std::erase(g_windows, this);
-        static_api_ptr_t<ui_selection_manager>()->unregister_callback(this);
-        static_api_ptr_t<playlist_manager_v3>()->unregister_callback(this);
-        static_api_ptr_t<play_callback_manager>()->unregister_callback(this);
+        ui_selection_manager::get()->unregister_callback(this);
+        playlist_manager_v3::get()->unregister_callback(this);
+        play_callback_manager::get()->unregister_callback(this);
         now_playing_album_art_notify_manager::get()->remove(this);
         m_selection_handles.remove_all();
         m_image.reset();
@@ -181,10 +195,10 @@ LRESULT ArtworkPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN: {
         const auto start_artwork_type_index = get_displayed_artwork_type_index();
         auto artwork_type_index = start_artwork_type_index;
-        const t_size count = g_artwork_types.size();
+        const size_t count = g_artwork_types.size();
         bool artwork_found = false;
 
-        for (t_size i = 0; i < count; i++) {
+        for (size_t i = 0; i < count; i++) {
             artwork_type_index = (artwork_type_index + 1) % count;
 
             if (!refresh_image(artwork_type_index))
@@ -253,7 +267,7 @@ void ArtworkPanel::on_selection_changed(const pfc::list_base_const_t<metadb_hand
             m_selection_handles = p_selection;
 
         if (g_track_mode_includes_selection(m_track_mode)
-            && (!g_track_mode_includes_auto(m_track_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+            && (!g_track_mode_includes_auto(m_track_mode) || !play_control::get()->is_playing())) {
             if (m_selection_handles.get_count()) {
                 m_artwork_loader->request(m_selection_handles[0], new service_impl_t<CompletionNotifyForwarder>(this));
             } else {
@@ -274,7 +288,7 @@ void ArtworkPanel::on_playback_stop(play_control::t_stop_reason p_reason)
         bool b_set = false;
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
         if (m_track_mode == track_auto_playlist_playing) {
-            static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+            playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         } else if (m_track_mode == track_auto_selection_playing) {
             handles = m_selection_handles;
         }
@@ -306,12 +320,12 @@ void ArtworkPanel::force_reload_artwork()
 {
     auto is_from_playback = false;
     metadb_handle_ptr handle;
-    if (g_track_mode_includes_now_playing(m_track_mode) && static_api_ptr_t<play_control>()->is_playing()) {
-        static_api_ptr_t<play_control>()->get_now_playing(handle);
+    if (g_track_mode_includes_now_playing(m_track_mode) && play_control::get()->is_playing()) {
+        play_control::get()->get_now_playing(handle);
         is_from_playback = true;
     } else if (g_track_mode_includes_playlist(m_track_mode)) {
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         if (handles.get_count())
             handle = handles[0];
     } else if (g_track_mode_includes_selection(m_track_mode)) {
@@ -331,9 +345,9 @@ void ArtworkPanel::force_reload_artwork()
 void ArtworkPanel::on_playlist_switch()
 {
     if (g_track_mode_includes_playlist(m_track_mode)
-        && (!g_track_mode_includes_auto(m_track_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+        && (!g_track_mode_includes_auto(m_track_mode) || !play_control::get()->is_playing())) {
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         if (handles.get_count()) {
             m_artwork_loader->request(handles[0], new service_impl_t<CompletionNotifyForwarder>(this));
         } else {
@@ -347,9 +361,9 @@ void ArtworkPanel::on_playlist_switch()
 void ArtworkPanel::on_items_selection_change(const bit_array& p_affected, const bit_array& p_state)
 {
     if (g_track_mode_includes_playlist(m_track_mode)
-        && (!g_track_mode_includes_auto(m_track_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+        && (!g_track_mode_includes_auto(m_track_mode) || !play_control::get()->is_playing())) {
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         if (handles.get_count()) {
             m_artwork_loader->request(handles[0], new service_impl_t<CompletionNotifyForwarder>(this));
         } else {
@@ -375,10 +389,10 @@ void ArtworkPanel::on_completion(unsigned p_code)
     m_artwork_type_override_index = m_selected_artwork_type_index;
 
     bool b_found = false;
-    t_size count = g_artwork_types.size();
+    size_t count = g_artwork_types.size();
     if (m_lock_type)
         count = std::min(size_t{1}, count);
-    for (t_size i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         if (refresh_image()) {
             b_found = true;
             break;
@@ -566,12 +580,12 @@ public:
     const GUID& get_client_guid() const override { return g_guid_colour_client; }
     void get_name(pfc::string_base& p_out) const override { p_out = "Artwork view"; }
 
-    t_size get_supported_colours() const override { return colours::colour_flag_background; } // bit-mask
-    t_size get_supported_bools() const override { return colours::bool_flag_dark_mode_enabled; } // bit-mask
+    uint32_t get_supported_colours() const override { return colours::colour_flag_background; } // bit-mask
+    uint32_t get_supported_bools() const override { return colours::bool_flag_dark_mode_enabled; } // bit-mask
     bool get_themes_supported() const override { return false; }
 
-    void on_colour_changed(t_size mask) const override { ArtworkPanel::g_on_colours_change(); }
-    void on_bool_changed(t_size mask) const override
+    void on_colour_changed(uint32_t mask) const override { ArtworkPanel::g_on_colours_change(); }
+    void on_bool_changed(uint32_t mask) const override
     {
         if ((mask & colours::bool_flag_dark_mode_enabled))
             ArtworkPanel::s_on_dark_mode_status_change();
@@ -589,22 +603,11 @@ void ArtworkPanel::CompletionNotifyForwarder::on_completion(unsigned p_code)
     m_this->on_completion(p_code);
 }
 
-ArtworkPanel::class_data& ArtworkPanel::get_class_data() const
-{
-    DWORD flags = 0;
-    if (cfg_edge_style == 1)
-        flags |= WS_EX_CLIENTEDGE;
-    if (cfg_edge_style == 2)
-        flags |= WS_EX_STATICEDGE;
-    __implement_get_class_data_ex2(_T("CUI Artwork View"), _T(""), false, true, 0,
-        WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, WS_EX_CONTROLPARENT | flags, 0, IDC_HAND);
-}
-
-void ArtworkPanel::set_config(stream_reader* p_reader, t_size size, abort_callback& p_abort)
+void ArtworkPanel::set_config(stream_reader* p_reader, size_t size, abort_callback& p_abort)
 {
     if (size) {
         p_reader->read_lendian_t(m_track_mode, p_abort);
-        t_uint32 version = pfc_infinite;
+        uint32_t version = pfc_infinite;
         try {
             p_reader->read_lendian_t(version, p_abort);
         } catch (exception_io_data_truncation const&) {
@@ -615,7 +618,7 @@ void ArtworkPanel::set_config(stream_reader* p_reader, t_size size, abort_callba
             if (version >= 2) {
                 p_reader->read_lendian_t(m_lock_type, p_abort);
                 if (version >= 3) {
-                    p_reader->read_lendian_t(m_selected_artwork_type_index, p_abort);
+                    m_selected_artwork_type_index = p_reader->read_lendian_t<uint32_t>(p_abort);
                     if (m_selected_artwork_type_index >= g_artwork_types.size()) {
                         m_selected_artwork_type_index = 0;
                     }
@@ -626,7 +629,7 @@ void ArtworkPanel::set_config(stream_reader* p_reader, t_size size, abort_callba
     }
 }
 
-ArtworkPanel::MenuNodeTrackMode::MenuNodeTrackMode(ArtworkPanel* p_wnd, t_size p_value)
+ArtworkPanel::MenuNodeTrackMode::MenuNodeTrackMode(ArtworkPanel* p_wnd, uint32_t p_value)
     : p_this(p_wnd)
     , m_source(p_value)
 {
@@ -651,7 +654,7 @@ bool ArtworkPanel::MenuNodeTrackMode::get_display_data(pfc::string_base& p_out, 
     return true;
 }
 
-const char* ArtworkPanel::MenuNodeTrackMode::get_name(t_size source)
+const char* ArtworkPanel::MenuNodeTrackMode::get_name(uint32_t source)
 {
     if (source == track_playing)
         return "Playing item";
@@ -664,7 +667,7 @@ const char* ArtworkPanel::MenuNodeTrackMode::get_name(t_size source)
     return "Automatic (playlist selection/playing item)";
 }
 
-ArtworkPanel::MenuNodeArtworkType::MenuNodeArtworkType(ArtworkPanel* p_wnd, t_size p_value)
+ArtworkPanel::MenuNodeArtworkType::MenuNodeArtworkType(ArtworkPanel* p_wnd, uint32_t p_value)
     : p_this(p_wnd)
     , m_type(p_value)
 {
@@ -692,7 +695,7 @@ bool ArtworkPanel::MenuNodeArtworkType::get_display_data(pfc::string_base& p_out
     return true;
 }
 
-const char* ArtworkPanel::MenuNodeArtworkType::get_name(t_size source)
+const char* ArtworkPanel::MenuNodeArtworkType::get_name(uint32_t source)
 {
     if (source == 0)
         return "Front cover";
@@ -713,12 +716,12 @@ ArtworkPanel::MenuNodeSourcePopup::MenuNodeSourcePopup(ArtworkPanel* p_wnd)
     m_items.emplace_back(new MenuNodeTrackMode(p_wnd, 1));
 }
 
-void ArtworkPanel::MenuNodeSourcePopup::get_child(unsigned p_index, uie::menu_node_ptr& p_out) const
+void ArtworkPanel::MenuNodeSourcePopup::get_child(size_t p_index, uie::menu_node_ptr& p_out) const
 {
     p_out = m_items[p_index].get_ptr();
 }
 
-unsigned ArtworkPanel::MenuNodeSourcePopup::get_children_count() const
+size_t ArtworkPanel::MenuNodeSourcePopup::get_children_count() const
 {
     return m_items.size();
 }
@@ -739,12 +742,12 @@ ArtworkPanel::MenuNodeTypePopup::MenuNodeTypePopup(ArtworkPanel* p_wnd)
     m_items.emplace_back(new MenuNodeArtworkType(p_wnd, 3));
 }
 
-void ArtworkPanel::MenuNodeTypePopup::get_child(unsigned p_index, uie::menu_node_ptr& p_out) const
+void ArtworkPanel::MenuNodeTypePopup::get_child(size_t p_index, uie::menu_node_ptr& p_out) const
 {
     p_out = m_items[p_index].get_ptr();
 }
 
-unsigned ArtworkPanel::MenuNodeTypePopup::get_children_count() const
+size_t ArtworkPanel::MenuNodeTypePopup::get_children_count() const
 {
     return m_items.size();
 }

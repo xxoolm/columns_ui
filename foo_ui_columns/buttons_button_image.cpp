@@ -1,120 +1,169 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "buttons.h"
+#include "svg.h"
 #include "wic.h"
 
 namespace cui::toolbars::buttons {
 
-ButtonsToolbar::ButtonImage::~ButtonImage()
+bool ButtonsToolbar::ButtonImage::is_valid() const
 {
-    if (m_bm)
-        DeleteBitmap(m_bm);
-    if (m_bm_mask)
-        DeleteBitmap(m_bm_mask);
-    if (m_icon)
-        DestroyIcon(m_icon);
-}
-bool ButtonsToolbar::ButtonImage::is_valid()
-{
-    return m_bm != nullptr;
+    return m_bm || m_icon;
 }
 
-void ButtonsToolbar::ButtonImage::load(const Button::CustomImage& p_image)
+void ButtonsToolbar::ButtonImage::preload(const Button::CustomImage& p_image)
 {
-    TRACK_CALL_TEXT("cui::ButtonsToolbar::ButtonImage::load");
+    TRACK_CALL_TEXT("cui::ButtonsToolbar::ButtonImage::preload");
 
     m_mask_type = p_image.m_mask_type;
     m_mask_colour = p_image.m_mask_colour;
 
-    pfc::string8 fullPath;
-    p_image.get_path(fullPath);
+    if (p_image.content_type() != CustomImageContentType::Other)
+        return;
 
-    if (!_stricmp(string_extension(fullPath), "bmp")) // Gdiplus vs 32bpp
-        m_bm = (HBITMAP)uLoadImage(
-            core_api::get_my_instance(), fullPath, IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE);
-    else if (!_stricmp(string_extension(fullPath), "ico"))
-        m_icon = (HICON)uLoadImage(core_api::get_my_instance(), fullPath, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-            GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
-    else {
-        try {
-            m_bm = wic::create_hbitmap_from_path(fullPath).release();
-        } catch (const std::exception& ex) {
-            fbh::print_to_console(u8"Buttons toolbar – loading image failed: "_pcc, ex.what());
-            m_bm = nullptr;
-        }
+    const pfc::string8 full_path = p_image.get_path();
+
+    try {
+        m_bitmap_source = wic::create_bitmap_source_from_path(full_path);
+        unsigned width{};
+        unsigned height{};
+        wic::check_hresult(m_bitmap_source->GetSize(&width, &height));
+        m_bitmap_source_size = std::make_tuple(gsl::narrow<int>(width), gsl::narrow<int>(height));
+    } catch (const std::exception& ex) {
+        fbh::print_to_console(u8"Buttons toolbar – loading image failed: "_pcc, ex.what());
     }
-    if (m_bm) {
-        switch (p_image.m_mask_type) {
-        default:
-            break;
-        case ui_extension::MASK_COLOUR:
-            break;
-#if 0
-        case ui_extension::MASK_BITMAP:
-        {
-            if (!_stricmp(pfc::string_extension(p_image.m_mask_path), "png"))
-            {
-                m_bm_mask = read_png(0, p_image.m_mask_path);
-            }
-            else
-                m_bm_mask = (HBITMAP)LoadImage(core_api::get_my_instance(), pfc::stringcvt::string_os_from_utf8(p_image.m_mask_path), IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADFROMFILE | LR_MONOCHROME);
-            if (!m_bm_mask)
-                console::printf("failed loading image \"%s\"", p_image.m_mask_path.get_ptr());
-        }
-        break;
-#endif
-        }
-    } else if (!m_icon)
-        console::printf("failed loading image \"%s\"", fullPath.get_ptr());
 }
-void ButtonsToolbar::ButtonImage::load(
-    const service_ptr_t<uie::button>& p_in, COLORREF colour_btnface, unsigned cx, unsigned cy)
+
+bool ButtonsToolbar::ButtonImage::load_custom_image(const Button::CustomImage& custom_image, int width, int height)
 {
-    uie::button_v2::ptr inv2;
-    if (p_in->service_query_t(inv2)) {
-        unsigned handle_type = 0;
-        HANDLE image = inv2->get_item_bitmap(0, colour_btnface, cx, cy, handle_type);
-        if (handle_type == uie::button_v2::handle_type_bitmap)
-            m_bm = (HBITMAP)image;
-        else if (handle_type == uie::button_v2::handle_type_icon)
-            m_icon = (HICON)image;
-    } else
-        m_bm = p_in->get_item_bitmap(0, colour_btnface, m_mask_type, m_mask_colour, m_bm_mask);
+    const pfc::string8 full_path = custom_image.get_path();
+    const auto content_type = custom_image.content_type();
+
+    if (content_type == CustomImageContentType::Ico) {
+        m_icon.reset(static_cast<HICON>(
+            uLoadImage(wil::GetModuleInstanceHandle(), full_path, IMAGE_ICON, width, height, LR_LOADFROMFILE)));
+
+        if (!m_icon)
+            fbh::print_to_console(u8"Buttons toolbar – loading icon failed. Path: "_pcc, full_path.get_ptr());
+        return false;
+    }
+
+    if (content_type == CustomImageContentType::Svg) {
+        try {
+            load_custom_svg_image(full_path, width, height);
+        } catch (const std::exception& ex) {
+            fbh::print_to_console(
+                u8"Buttons toolbar – loading SVG file failed. Path: "_pcc, full_path.get_ptr(), " Error: ", ex.what());
+        }
+
+        return false;
+    }
+
+    if (m_bitmap_source) {
+        try {
+            bool resized{};
+            if (*m_bitmap_source_size != std::make_tuple(width, height)) {
+                m_bitmap_source = wic::resize_bitmap_source(m_bitmap_source, width, height);
+                resized = true;
+            }
+            m_bm = wic::create_hbitmap_from_bitmap_source(m_bitmap_source);
+            return resized;
+        } catch (const std::exception& ex) {
+            fbh::print_to_console(
+                u8"Buttons toolbar – loading image failed. Path: "_pcc, full_path.get_ptr(), " Error: ", ex.what());
+        }
+        m_bitmap_source.reset();
+    }
+    return false;
 }
+
+void ButtonsToolbar::ButtonImage::load_custom_svg_image(const char* full_path, int width, int height)
+{
+    svg::ensure_available();
+
+    abort_callback_dummy aborter;
+    const auto svg_data = filesystem::g_readWholeFile(full_path, 52'000'000, aborter);
+
+    const auto render_width = width;
+    const auto render_height = height;
+
+    m_bm = svg::render_to_hbitmap(
+        render_width, render_height, svg_data->data(), svg_data->size(), svg_services::ScalingMode::Fit);
+}
+
+void ButtonsToolbar::ButtonImage::load_default_image(
+    const service_ptr_t<uie::button>& button_ptr, COLORREF colour_btnface, int width, int height)
+{
+    uie::button_v2::ptr button_v2_ptr;
+    if (!button_ptr->service_query_t(button_v2_ptr)) {
+        m_bm.reset(button_ptr->get_item_bitmap(0, colour_btnface, m_mask_type, m_mask_colour, *m_bm_mask.put()));
+        return;
+    }
+
+    unsigned handle_type = 0;
+    const HANDLE image = button_v2_ptr->get_item_bitmap(0, colour_btnface, width, height, handle_type);
+
+    if (handle_type == uie::button_v2::handle_type_icon) {
+        m_icon.reset(static_cast<HICON>(image));
+        return;
+    }
+
+    if (handle_type != uie::button_v2::handle_type_bitmap)
+        return;
+
+    wil::unique_hbitmap bitmap(static_cast<HBITMAP>(image));
+
+    BITMAP bitmap_info{};
+    if (!GetObject(bitmap.get(), sizeof(bitmap_info), &bitmap_info))
+        return;
+
+    if (bitmap_info.bmWidth == width && bitmap_info.bmHeight == height) {
+        m_bm = std::move(bitmap);
+        return;
+    }
+
+    try {
+        m_bm = wic::resize_hbitmap(bitmap.get(), width, height);
+    } catch (const std::exception& ex) {
+        fbh::print_to_console(u8"Buttons toolbar – error resizing default image: "_pcc, ex.what());
+    }
+}
+
+bool ButtonsToolbar::ButtonImage::load(std::optional<std::reference_wrapper<Button::CustomImage>> custom_image,
+    const service_ptr_t<uie::button>& button_ptr, COLORREF colour_btnface, int width, int height)
+{
+    TRACK_CALL_TEXT("cui::ButtonsToolbar::ButtonImage::load");
+
+    if (custom_image) {
+        return load_custom_image(custom_image->get(), width, height);
+    }
+
+    if (button_ptr.is_valid()) {
+        load_default_image(button_ptr, colour_btnface, width, height);
+        return false;
+    }
+
+    return false;
+}
+
 unsigned ButtonsToolbar::ButtonImage::add_to_imagelist(HIMAGELIST iml)
 {
     unsigned rv = I_IMAGECALLBACK;
     if (m_icon) {
-        rv = ImageList_ReplaceIcon(iml, -1, m_icon);
+        rv = ImageList_ReplaceIcon(iml, -1, m_icon.get());
     } else if (m_bm) {
         switch (m_mask_type) {
         default:
-            rv = ImageList_Add(iml, m_bm, nullptr);
+            rv = ImageList_Add(iml, m_bm.get(), nullptr);
             break;
         case ui_extension::MASK_COLOUR:
-            rv = ImageList_AddMasked(iml, m_bm, m_mask_colour);
+            rv = ImageList_AddMasked(iml, m_bm.get(), m_mask_colour);
             break;
         case ui_extension::MASK_BITMAP: {
-            rv = ImageList_Add(iml, m_bm, m_bm_mask);
+            rv = ImageList_Add(iml, m_bm.get(), m_bm_mask.get());
         } break;
         }
     }
     return rv;
-}
-void ButtonsToolbar::ButtonImage::get_size(SIZE& p_out)
-{
-    p_out.cx = 0;
-    p_out.cy = 0;
-    BITMAP bmi{};
-    if (m_icon) {
-        ICONINFO ii{};
-        if (GetIconInfo(m_icon, &ii)) {
-            GetObject(ii.hbmColor ? ii.hbmColor : ii.hbmMask, sizeof(BITMAP), &bmi);
-        }
-    } else if (m_bm) {
-        GetObject(m_bm, sizeof(BITMAP), &bmi);
-    }
-    p_out.cx = bmi.bmWidth;
-    p_out.cy = bmi.bmHeight;
 }
 
 } // namespace cui::toolbars::buttons

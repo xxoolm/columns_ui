@@ -1,7 +1,7 @@
 #pragma once
 
-#include "fonts_manager_data.h"
-#include "colours_manager_data.h"
+#include "font_manager_data.h"
+#include "colour_manager_data.h"
 
 class ColoursClientListEntry {
 public:
@@ -65,8 +65,8 @@ public:
     }
 };
 
-extern ColoursManagerData g_colours_manager_data;
-extern FontsManagerData g_fonts_manager_data;
+extern cui::colours::ColourManagerData g_colour_manager_data;
+extern FontManagerData g_font_manager_data;
 
 namespace cui::colours {
 
@@ -77,5 +77,9 @@ enum class DarkModeStatus {
 };
 
 extern fbh::ConfigInt32 dark_mode_status;
+
+void handle_effective_dark_mode_status_change();
+bool handle_system_dark_mode_status_change();
+bool handle_system_dark_mode_availability_change();
 
 } // namespace cui::colours

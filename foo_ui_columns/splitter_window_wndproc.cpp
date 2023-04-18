@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "dark_mode.h"
 #include "splitter.h"
@@ -33,13 +33,10 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         g_instances.remove_item(this);
         m_wnd = nullptr;
         break;
-    case WM_ERASEBKGND:
-        dark::draw_layout_background(wnd, reinterpret_cast<HDC>(wp));
-        return TRUE;
     case WM_SHOWWINDOW:
         if (wp == TRUE && lp == 0) {
-            unsigned count = m_panels.get_count();
-            for (unsigned n = 0; n < count; n++) {
+            const auto count = m_panels.get_count();
+            for (size_t n = 0; n < count; n++) {
                 ShowWindow(m_panels[n]->m_wnd_child, SW_SHOWNORMAL);
                 ShowWindow(m_panels[n]->m_wnd, SW_SHOWNORMAL);
             }
@@ -63,10 +60,10 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         lpmmi->ptMaxTrackSize.y = get_orientation() == vertical ? 0 : MAXLONG;
         lpmmi->ptMaxTrackSize.x = get_orientation() == horizontal ? 0 : MAXLONG;
 
-        unsigned count = m_panels.get_count();
+        const auto count = m_panels.get_count();
         bool b_found = false;
 
-        for (unsigned n = 0; n < count; n++) {
+        for (size_t n = 0; n < count; n++) {
             MINMAXINFO mmi{};
             mmi.ptMaxTrackSize.x = MAXLONG;
             mmi.ptMaxTrackSize.y = MAXLONG;
@@ -164,7 +161,7 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         HWND child = RealChildWindowFromPoint(wnd, pt);
         if (child == wnd) {
-            unsigned p_panel = -1;
+            size_t p_panel = -1;
             bool b_have_next = false;
             bool b_on_divider = false;
 
@@ -187,7 +184,7 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             HWND child = RealChildWindowFromPoint(wnd, pt);
             if (child == wnd) {
-                unsigned p_panel = -1;
+                size_t p_panel = -1;
                 bool b_have_next = false;
                 bool b_on_divider = false;
                 if (m_panel_dragging_valid) {
@@ -248,16 +245,15 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             }
 
             if (m_panel_dragging_valid && wp & MK_LBUTTON && is_index_valid(m_panel_dragging)) {
-                int new_height = m_last_position - (get_orientation() == vertical ? pt.y : pt.x);
                 int delta = (get_orientation() == vertical ? pt.y : pt.x) - m_last_position;
-                // console::formatter() << "before or: pt = " << pt.y << "," << pt.x << " lastpos: " << m_last_position
-                // << " enddelta: " << delta;
                 auto& p_panel = m_panels[m_panel_dragging];
+
                 if (p_panel->m_hidden && delta) {
                     p_panel->m_hidden = false;
                     p_panel->m_size = 0;
                     get_host()->on_size_limit_change(get_wnd(), uie::size_limit_all);
                 }
+
                 int delta_changed = override_size(m_panel_dragging, delta);
                 m_last_position = (get_orientation() == vertical ? pt.y : pt.x) + delta_changed;
                 on_size_changed();
@@ -274,7 +270,7 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         HWND child = ChildWindowFromPoint(wnd, pt);
         if (child == wnd) {
-            unsigned p_panel = -1;
+            size_t p_panel = -1;
             if (find_by_divider_pt(pt, p_panel) && is_index_valid(p_panel)) {
                 bool b_have_next = is_index_valid(p_panel + 1);
                 if (m_panels[p_panel]->m_locked && !m_panels[p_panel]->m_autohide
@@ -353,4 +349,4 @@ LRESULT FlatSplitterPanel::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProc(wnd, msg, wp, lp);
 }
 
-}
+} // namespace cui::panels::splitter

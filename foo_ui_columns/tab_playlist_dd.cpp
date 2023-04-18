@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "config.h"
 
 static class TabPlaylistSwitcherDragAndDrop : public PreferencesTab {
@@ -20,7 +20,7 @@ static class TabPlaylistSwitcherDragAndDrop : public PreferencesTab {
     }
 
 public:
-    static BOOL CALLBACK ConfigProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+    static INT_PTR CALLBACK ConfigProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     {
         switch (msg) {
         case WM_INITDIALOG: {
@@ -45,28 +45,28 @@ public:
                 }
             } break;
             case (EN_CHANGE << 16) | IDC_DROP_STRING:
-                cfg_pgenstring = string_utf8_from_window((HWND)lp);
+                cfg_pgenstring = uGetWindowText((HWND)lp);
                 break;
 #if 0
             case IDC_DROP_NAME:
-                cfg_pgen_dir = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_pgen_dir = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
             case IDC_DROP_PLAYLIST:
-                cfg_pgen_playlist = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_pgen_playlist = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
 #endif
             case IDC_REMOVE_UNDERSCORES:
-                cfg_replace_drop_underscores = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_replace_drop_underscores = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
             case IDC_DROP_USE_STRING:
-                cfg_pgen_tf = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_pgen_tf = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
             case IDC_ACTIVATE_TARGET:
                 main_window::config_set_activate_target_playlist_on_dropped_items(
                     0 != SendMessage((HWND)lp, BM_GETCHECK, 0, 0));
                 break;
             case IDC_AUTOSWITCH: {
-                cfg_drag_autoswitch = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_drag_autoswitch = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
             } break;
             }
         }

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "dark_mode.h"
 #include "mw_drop_target.h"
@@ -87,8 +87,9 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             const int cx = GetSystemMetrics(SM_CXSMICON);
             const int cy = GetSystemMetrics(SM_CYSMICON);
 
-            m_taskbar_button_images.reset(ImageList_Create(cx, cy, ILC_COLOR32, std::size(light_taskbar_icons), 0));
-            ImageList_SetImageCount(m_taskbar_button_images.get(), std::size(light_taskbar_icons));
+            m_taskbar_button_images.reset(
+                ImageList_Create(cx, cy, ILC_COLOR32, gsl::narrow<int>(std::size(taskbar_icon_configs)), 0));
+            ImageList_SetImageCount(m_taskbar_button_images.get(), gsl::narrow<int>(std::size(taskbar_icon_configs)));
 
             if (update_taskbar_button_images())
                 queue_taskbar_button_update(false);
@@ -99,9 +100,8 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
     if (WM_SHELLHOOKMESSAGE && msg == WM_SHELLHOOKMESSAGE && m_should_handle_multimedia_keys) {
         if (wp == HSHELL_APPCOMMAND) {
-            short cmd = GET_APPCOMMAND_LPARAM(lp);
-            WORD uDevice = GET_DEVICE_LPARAM(lp);
-            WORD dwKeys = GET_KEYSTATE_LPARAM(lp);
+            const auto cmd = GET_APPCOMMAND_LPARAM(lp);
+
             switch (cmd) {
             case APPCOMMAND_MEDIA_PLAY_PAUSE:
                 standard_commands::main_play_or_pause();
@@ -299,7 +299,7 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
                 const keyboard_shortcut_manager::shortcut_type shortcuts[]
                     = {keyboard_shortcut_manager::TYPE_CONTEXT_NOW_PLAYING};
-                p_manager->set_shortcut_preference(shortcuts, tabsize(shortcuts));
+                p_manager->set_shortcut_preference(shortcuts, gsl::narrow<unsigned>(std::size(shortcuts)));
                 if (p_manager->init_context_now_playing(
                         standard_config_objects::query_show_keyboard_shortcuts_in_menus()
                             ? contextmenu_manager::FLAG_SHOW_SHORTCUTS
@@ -348,7 +348,8 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 RBHITTESTINFO rbht;
                 rbht.pt = pt_client;
 
-                int idx_hit = SendMessage(rebar::g_rebar, RB_HITTEST, 0, reinterpret_cast<LPARAM>(&rbht));
+                int idx_hit
+                    = static_cast<int>(SendMessage(rebar::g_rebar, RB_HITTEST, 0, reinterpret_cast<LPARAM>(&rbht)));
 
                 uie::window_ptr p_ext;
 
@@ -380,18 +381,19 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
                 moo.sort_by_category_and_name();
 
-                unsigned count_exts = moo.get_count();
+                const auto count_exts = moo.get_count();
                 HMENU popup = nullptr;
-                for (unsigned n = 0; n < count_exts; n++) {
+                for (size_t n = 0; n < count_exts; n++) {
                     if (!n || uStringCompare(moo[n - 1].category, moo[n].category)) {
                         if (n)
-                            uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)popup, moo[n - 1].category);
+                            uAppendMenu(
+                                menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(popup), moo[n - 1].category);
                         popup = CreatePopupMenu();
                     }
                     uAppendMenu(popup, (MF_STRING | (rebar::g_rebar_window->check_band(moo[n].guid) ? MF_CHECKED : 0)),
                         IDM_BASE + n, moo[n].name);
                     if (n == count_exts - 1)
-                        uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)popup, moo[n].category);
+                        uAppendMenu(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(popup), moo[n].category);
                     IDM_EXT_BASE++;
                 }
 
@@ -451,14 +453,11 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     case MSG_SET_AOT:
         SetWindowPos(wnd, wp ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         break;
-    case MSG_UPDATE_STATUS:
-        status_bar::regenerate_text();
-        break;
     case MSG_UPDATE_TITLE:
         update_title();
         break;
     case MSG_RUN_INITIAL_SETUP:
-        QuickSetupDialog::g_run();
+        QuickSetupDialog::s_run();
         return 0;
     case WM_GETDLGCODE:
         return DLGC_WANTALLKEYS;
@@ -524,14 +523,14 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         if (process_keydown(msg, lp, wp))
             return 0;
         break;
-    case MSG_NOTICATION_ICON:
+    case MSG_NOTIFICATION_ICON:
         if (lp == WM_LBUTTONUP) {
             // if (b_wasDown)
             standard_commands::main_activate_or_hide();
         } else if (lp == WM_RBUTTONDOWN) {
             g_last_sysray_r_down = true;
         }
-#if 0 
+#if 0
             /* There was some misbehaviour with the newer messages. So we don't use them. */
         if (lp == NIN_SELECT || lp == NIN_KEYSELECT)
         {
@@ -574,7 +573,8 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                     if (p_manager_selection.is_valid()) {
                         const keyboard_shortcut_manager::shortcut_type shortcuts[]
                             = {keyboard_shortcut_manager::TYPE_CONTEXT_NOW_PLAYING};
-                        p_manager_selection->set_shortcut_preference(shortcuts, tabsize(shortcuts));
+                        p_manager_selection->set_shortcut_preference(
+                            shortcuts, gsl::narrow<unsigned>(std::size(shortcuts)));
 
                         if (p_manager_selection->init_context_now_playing(
                                 standard_config_objects::query_show_keyboard_shortcuts_in_menus()
@@ -590,7 +590,7 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                             pfc::string8_fast_aggressive name;
                             pfc::string8_fast_aggressive title2;
                             pfc::string8_fast_aggressive title3;
-                            static_api_ptr_t<play_control> play_api;
+                            const auto play_api = play_control::get();
                             metadb_handle_ptr track;
                             if (play_api->get_now_playing(track)) {
                                 metadb_info_container::ptr p_info;
@@ -613,7 +613,7 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                             track.release();
                             uFixAmpersandChars_v2(title, name);
 
-                            uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)menu_now_playing, name);
+                            uAppendMenu(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(menu_now_playing), name);
 
                             uAppendMenu(menu, MF_SEPARATOR, 0, "");
                         }
@@ -641,7 +641,7 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
 
                 AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
-                t_size insert_point = GetMenuItemCount(menu);
+                int insert_point = GetMenuItemCount(menu);
                 if (systray_contextmenus::g_menu_file_exit.is_valid()) {
                     systray_contextmenus::g_menu_file_exit->instantiate(mainmenu_groups::file_etc_exit);
                     systray_contextmenus::g_menu_file_exit->generate_menu_win32(menu,
@@ -649,7 +649,7 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                         b_shortcuts ? mainmenu_manager::flag_show_shortcuts_global : 0);
                 }
 
-                bool b_visible = static_api_ptr_t<ui_control>()->is_visible();
+                bool b_visible = ui_control::get()->is_visible();
                 InsertMenu(menu, insert_point, MF_STRING | MF_BYPOSITION, systray_contextmenus::ID_ACTIVATE,
                     b_visible ? _T("Hide foobar2000") : _T("Show foobar2000"));
 
@@ -677,9 +677,9 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (cmd) {
                     if (cmd == systray_contextmenus::ID_ACTIVATE) {
                         if (b_visible)
-                            static_api_ptr_t<ui_control>()->hide();
+                            ui_control::get()->hide();
                         else
-                            static_api_ptr_t<ui_control>()->activate();
+                            ui_control::get()->activate();
                     } else if (cmd < systray_contextmenus::ID_BASE_FILE_PREFS) {
                         if (p_manager_selection.is_valid()) {
                             p_manager_selection->execute_by_id(cmd - systray_contextmenus::ID_NOW_PLAYING_BASE);
@@ -787,9 +787,9 @@ LRESULT cui::MainWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
                 if (part_id == status_bar::StatusBarPartID::PlaybackInformation)
                     helpers::execute_main_menu_command(cfg_statusdbl);
-                else if (cfg_show_seltime && part_id == status_bar::StatusBarPartID::TrackLength) {
-                    static_api_ptr_t<playlist_manager>()->activeplaylist_set_selection(
-                        bit_array_true(), bit_array_true());
+                else if ((cfg_show_seltime && part_id == status_bar::StatusBarPartID::TrackLength)
+                    || (cfg_show_selcount && part_id == status_bar::StatusBarPartID::TrackCount)) {
+                    playlist_manager::get()->activeplaylist_set_selection(bit_array_true(), bit_array_true());
                 }
             } break;
             }

@@ -1,281 +1,150 @@
-#include "stdafx.h"
-#include "config.h"
+#include "pch.h"
+
+#include "config_appearance.h"
 #include "tab_colours.h"
+#include "tab_dark_mode.h"
 
-class PlaylistViewAppearanceDataSet : public cui::fcl::dataset {
-    enum ItemID {
-        colours_pview_mode,
-        colours_pview_background,
-        colours_pview_selection_background,
-        colours_pview_inactive_selection_background,
-        colours_pview_text,
-        colours_pview_selection_text,
-        colours_pview_inactive_selection_text,
-        colours_pview_header_font,
-        colours_pview_list_font,
-        colours_pview_use_system_focus_frame,
-        identifier_vertical_item_padding,
-        identifier_vertical_item_padding_dpi,
-    };
-    void get_name(pfc::string_base& p_out) const override { p_out = "Colours"; }
-    const GUID& get_group() const override { return cui::fcl::groups::colours_and_fonts; }
+namespace cui {
+
+namespace {
+
+class ColoursDataSet : public fcl::dataset {
+    enum { stream_version = 0 };
+    void get_name(pfc::string_base& p_out) const override { p_out = "Colours (unified)"; }
+    const GUID& get_group() const override { return fcl::groups::colours_and_fonts; }
     const GUID& get_guid() const override
     {
-        // {1D5291B1-392D-4469-B905-91202B80EB7B}
-        static const GUID guid = {0x1d5291b1, 0x392d, 0x4469, {0xb9, 0x5, 0x91, 0x20, 0x2b, 0x80, 0xeb, 0x7b}};
+        // {165946E7-6165-4680-A08E-84B5768458E8}
+        static const GUID guid = {0x165946e7, 0x6165, 0x4680, {0xa0, 0x8e, 0x84, 0xb5, 0x76, 0x84, 0x58, 0xe8}};
         return guid;
     }
-    void get_data(stream_writer* p_writer, t_uint32 type, cui::fcl::t_export_feedback& feedback,
+    enum Identifier {
+        identifier_global_light_entry,
+        identifier_light_entries,
+        identifier_global_dark_entry,
+        identifier_dark_entries,
+        identifier_mode,
+        identifier_client_entry = 0,
+    };
+    void get_data(stream_writer* p_writer, uint32_t type, fcl::t_export_feedback& feedback,
         abort_callback& p_abort) const override
     {
         fbh::fcl::Writer out(p_writer, p_abort);
-        out.write_item(identifier_vertical_item_padding, settings::playlist_view_item_padding.get_raw_value().value);
-        out.write_item(identifier_vertical_item_padding_dpi, settings::playlist_view_item_padding.get_raw_value().dpi);
+
+        out.write_item(identifier_mode, cui::colours::dark_mode_status.get());
+
+        std::initializer_list<std::tuple<Identifier, colours::Entry::Ptr>> global_identifiers_and_entries
+            = {{identifier_global_light_entry, g_colour_manager_data.m_global_light_entry},
+                {identifier_global_dark_entry, g_colour_manager_data.m_global_dark_entry}};
+
+        for (auto&& [id, entry] : global_identifiers_and_entries) {
+            stream_writer_memblock mem;
+            entry->_export(&mem, p_abort);
+            out.write_item(id, mem.m_data.get_ptr(), gsl::narrow<uint32_t>(mem.m_data.get_size()));
+        }
+
+        std::initializer_list<std::tuple<Identifier, std::vector<colours::Entry::Ptr>&>> identifiers_and_entries
+            = {{identifier_light_entries, g_colour_manager_data.m_light_entries},
+                {identifier_dark_entries, g_colour_manager_data.m_dark_entries}};
+
+        for (auto&& [id, entries] : identifiers_and_entries) {
+            stream_writer_memblock mem;
+            fbh::fcl::Writer out2(&mem, p_abort);
+            const size_t count = entries.size();
+            mem.write_lendian_t(gsl::narrow<uint32_t>(count), p_abort);
+            for (auto&& entry : entries) {
+                stream_writer_memblock mem2;
+                entry->_export(&mem2, p_abort);
+                out2.write_item(
+                    identifier_client_entry, mem2.m_data.get_ptr(), gsl::narrow<uint32_t>(mem2.m_data.get_size()));
+            }
+            out.write_item(id, mem.m_data.get_ptr(), gsl::narrow<uint32_t>(mem.m_data.get_size()));
+        }
     }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, cui::fcl::t_import_feedback& feedback,
+    void set_data(stream_reader* p_reader, size_t stream_size, uint32_t type, fcl::t_import_feedback& feedback,
         abort_callback& p_abort) override
     {
-        static_api_ptr_t<cui::fonts::manager> api;
-        ColoursManagerData::entry_ptr_t colour_manager_entry;
-        g_colours_manager_data.find_by_guid(pfc::guid_null, colour_manager_entry);
-
         fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_uint32 element_id;
-        t_uint32 element_size;
-        bool b_colour_read = false;
+        uint32_t element_id;
+        uint32_t element_size;
 
-        bool item_padding_read = false;
-        bool font_read{false};
-        uih::IntegerAndDpi<int32_t> item_padding(0, uih::get_system_dpi_cached().cx);
+        const auto old_is_dark = cui::colours::is_dark_mode_active();
+        bool mode_read{};
 
         while (reader.get_remaining()) {
             reader.read_item(element_id);
             reader.read_item(element_size);
 
             switch (element_id) {
-            case identifier_vertical_item_padding:
-                reader.read_item(item_padding.value);
-                item_padding_read = true;
+            case identifier_mode:
+                colours::dark_mode_status.set(reader.read_item<int32_t>());
+                mode_read = true;
                 break;
-            case identifier_vertical_item_padding_dpi:
-                reader.read_item(item_padding.dpi);
-                item_padding_read = true;
-                break;
-            case colours_pview_mode: {
-                int use_custom_colours{};
-                reader.read_item(use_custom_colours);
-                if (use_custom_colours == 2)
-                    colour_manager_entry->colour_mode = cui::colours::colour_mode_themed;
-                else if (use_custom_colours == 1)
-                    colour_manager_entry->colour_mode = cui::colours::colour_mode_custom;
-                else
-                    colour_manager_entry->colour_mode = cui::colours::colour_mode_system;
-                break;
-            }
-            case colours_pview_use_system_focus_frame: {
-                int use_system_frame{};
-                reader.read_item(use_system_frame);
-                colour_manager_entry->use_custom_active_item_frame = !use_system_frame;
-                break;
-            }
-            case colours_pview_background:
-                b_colour_read = true;
-                reader.read_item(colour_manager_entry->background);
-                break;
-            case colours_pview_selection_background:
-                reader.read_item(colour_manager_entry->selection_background);
-                break;
-            case colours_pview_inactive_selection_background:
-                reader.read_item(colour_manager_entry->inactive_selection_background);
-                break;
-            case colours_pview_text:
-                reader.read_item(colour_manager_entry->text);
-                break;
-            case colours_pview_selection_text:
-                reader.read_item(colour_manager_entry->selection_text);
-                break;
-            case colours_pview_inactive_selection_text:
-                reader.read_item(colour_manager_entry->inactive_selection_text);
-                break;
-            case colours_pview_header_font: {
-                LOGFONT lf{};
-                reader.read_item(lf);
-                api->set_font(fonts::columns_playlist_header, lf);
-                api->set_font(fonts::ng_playlist_header, lf);
-                api->set_font(fonts::filter_header, lf);
-                font_read = true;
-                break;
-            }
-            case colours_pview_list_font: {
-                LOGFONT lf{};
-                reader.read_item(lf);
-                api->set_font(fonts::columns_playlist_items, lf);
-                api->set_font(fonts::ng_playlist_items, lf);
-                api->set_font(fonts::filter_items, lf);
-                font_read = true;
-                break;
-            }
+            case identifier_global_light_entry:
+            case identifier_global_dark_entry: {
+                std::vector<uint8_t> data(element_size);
+                reader.read(data.data(), data.size());
+
+                stream_reader_memblock_ref colour_reader(data.data(), data.size());
+                const auto entry = g_colour_manager_data.get_global_entry(element_id == identifier_global_dark_entry);
+                entry->import(&colour_reader, data.size(), type, p_abort);
+            } break;
+            case identifier_light_entries:
+            case identifier_dark_entries: {
+                std::vector<uint8_t> data(element_size);
+                reader.read(data.data(), data.size());
+
+                stream_reader_memblock_ref stream2(data.data(), data.size());
+                fbh::fcl::Reader sub_reader(&stream2, data.size(), p_abort);
+
+                const auto count = sub_reader.read_item<uint32_t>();
+
+                auto& entries = element_id == identifier_dark_entries ? g_colour_manager_data.m_dark_entries
+                                                                      : g_colour_manager_data.m_light_entries;
+
+                entries.clear();
+                entries.reserve(count);
+
+                for (auto _ : ranges::views::iota(0u, count)) {
+                    const auto sub_element_id = sub_reader.read_item<uint32_t>();
+                    const auto sub_element_size = sub_reader.read_item<uint32_t>();
+                    if (sub_element_id == identifier_client_entry) {
+                        std::vector<uint8_t> data2(sub_element_size);
+                        sub_reader.read(data2.data(), data2.size());
+
+                        stream_reader_memblock_ref colour_reader(data2.data(), data2.size());
+                        auto entry = std::make_shared<colours::Entry>(false);
+                        entry->import(&colour_reader, data2.size(), type, p_abort);
+                        entries.emplace_back(std::move(entry));
+                    } else
+                        sub_reader.skip(sub_element_size);
+                }
+            } break;
             default:
                 reader.skip(element_size);
                 break;
             }
         }
 
-        // on_header_font_change();
-        // on_playlist_font_change();
-        // pvt::ng_playlist_view_t::g_on_font_change();
-        // pvt::ng_playlist_view_t::g_on_header_font_change();
-        if (b_colour_read)
-            on_global_colours_change();
+        if (!mode_read)
+            colours::dark_mode_status.set(WI_EnumValue(cui::colours::DarkModeStatus::Disabled));
 
-        if (font_read)
-            refresh_appearance_prefs();
+        g_tab_dark_mode.refresh();
 
-        if (item_padding_read)
-            settings::playlist_view_item_padding = item_padding;
-        // refresh_all_playlist_views();
-        // pvt::ng_playlist_view_t::g_update_all_items();
+        if (old_is_dark != colours::is_dark_mode_active())
+            return;
+
+        g_tab_appearance.handle_external_configuration_change();
+
+        colours::common_colour_callback_manager.s_on_common_colour_changed(colours::colour_flag_all);
+
+        for (auto enumerator = colours::client::enumerate(); !enumerator.finished(); ++enumerator)
+            (*enumerator)->on_colour_changed(colours::colour_flag_all);
     }
 };
 
-cui::fcl::dataset_factory<PlaylistViewAppearanceDataSet> g_export_colours_t;
+service_factory_t<ColoursDataSet> g_fcl_colours_t;
 
-class PlaylistSwitcherAppearanceDataSet : public cui::fcl::dataset {
-    enum ItemID {
-        colours_switcher_mode, // not used
-        colours_switcher_background,
-        colours_switcher_selection_background,
-        colours_switcher_inactive_selection_background,
-        colours_switcher_text,
-        colours_switcher_selection_text,
-        colours_switcher_inactive_selection_text,
-        colours_switcher_font_tabs,
-        colours_switcher_font_list,
-        identifier_item_height,
-        identifier_item_height_dpi
-    };
-    void get_name(pfc::string_base& p_out) const override { p_out = "Colours"; }
-    const GUID& get_group() const override { return cui::fcl::groups::colours_and_fonts; }
-    const GUID& get_guid() const override
-    {
-        // {1DE0CF38-5E8E-439c-8F01-B8999975AC0D}
-        static const GUID guid = {0x1de0cf38, 0x5e8e, 0x439c, {0x8f, 0x1, 0xb8, 0x99, 0x99, 0x75, 0xac, 0xd}};
-        return guid;
-    }
-    void get_data(stream_writer* p_writer, t_uint32 type, cui::fcl::t_export_feedback& feedback,
-        abort_callback& p_abort) const override
-    {
-        fbh::fcl::Writer out(p_writer, p_abort);
-        out.write_item(identifier_item_height, settings::playlist_switcher_item_padding.get_raw_value().value);
-        out.write_item(identifier_item_height_dpi, settings::playlist_switcher_item_padding.get_raw_value().dpi);
-    }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, cui::fcl::t_import_feedback& feedback,
-        abort_callback& p_abort) override
-    {
-        fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_uint32 element_id;
-        t_uint32 element_size;
+} // namespace
 
-        bool font_read{false};
-        bool item_padding_read = false;
-        uih::IntegerAndDpi<int32_t> item_padding(0, uih::get_system_dpi_cached().cx);
-        static_api_ptr_t<cui::fonts::manager> api;
-
-        while (reader.get_remaining()) {
-            reader.read_item(element_id);
-            reader.read_item(element_size);
-
-            switch (element_id) {
-            case identifier_item_height:
-                item_padding_read = true;
-                reader.read_item(item_padding.value);
-                break;
-            case identifier_item_height_dpi:
-                reader.read_item(item_padding.dpi);
-                break;
-            case colours_switcher_font_list: {
-                LOGFONT lf{};
-                reader.read_item(lf);
-                api->set_font(fonts::playlist_switcher, lf);
-                font_read = true;
-                break;
-            }
-            case colours_switcher_font_tabs: {
-                LOGFONT lf{};
-                reader.read_item(lf);
-                api->set_font(fonts::playlist_tabs, lf);
-                api->set_font(fonts::splitter_tabs, lf);
-                font_read = true;
-                break;
-            }
-            default:
-                reader.skip(element_size);
-                break;
-            }
-        }
-
-        if (item_padding_read)
-            settings::playlist_switcher_item_padding = item_padding;
-
-        if (font_read)
-            refresh_appearance_prefs();
-        // update_playlist_switcher_panels();
-        // on_switcher_font_change();
-        // g_on_tabs_font_change();
-    }
-};
-
-cui::fcl::dataset_factory<PlaylistSwitcherAppearanceDataSet> g_export_colours_switcher_t;
-
-class LegacyFontsDataSet : public cui::fcl::dataset {
-    enum ItemID {
-        font_status,
-    };
-    void get_name(pfc::string_base& p_out) const override { p_out = "Misc fonts"; }
-    const GUID& get_group() const override { return cui::fcl::groups::colours_and_fonts; }
-    const GUID& get_guid() const override
-    {
-        // {0A297BE7-DE43-49da-8D8E-C8D888CF1014}
-        static const GUID guid = {0xa297be7, 0xde43, 0x49da, {0x8d, 0x8e, 0xc8, 0xd8, 0x88, 0xcf, 0x10, 0x14}};
-        return guid;
-    }
-    void get_data(stream_writer* p_writer, t_uint32 type, cui::fcl::t_export_feedback& feedback,
-        abort_callback& p_abort) const override
-    {
-        fbh::fcl::Writer out(p_writer, p_abort);
-        // out.write_item(font_status, cfg_status_font);
-    }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, cui::fcl::t_import_feedback& feedback,
-        abort_callback& p_abort) override
-    {
-        static_api_ptr_t<cui::fonts::manager> api;
-        fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_uint32 element_id;
-        t_uint32 element_size;
-        bool font_read{false};
-
-        while (reader.get_remaining()) {
-            reader.read_item(element_id);
-            reader.read_item(element_size);
-
-            switch (element_id) {
-            case font_status: {
-                LOGFONT lf{};
-                reader.read_item(lf);
-                api->set_font(fonts::status_bar, lf);
-                font_read = true;
-                break;
-            }
-            default:
-                reader.skip(element_size);
-                break;
-            }
-        }
-
-        if (font_read)
-            refresh_appearance_prefs();
-        // on_status_font_change();
-    }
-};
-
-cui::fcl::dataset_factory<LegacyFontsDataSet> g_export_misc_fonts_t;
+} // namespace cui

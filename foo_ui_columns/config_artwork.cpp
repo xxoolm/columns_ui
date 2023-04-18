@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "legacy_artwork_config.h"
 #include "artwork.h"
 #include "config.h"
@@ -38,7 +38,7 @@ public:
         m_initialising = false;
     }
 
-    BOOL on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+    INT_PTR on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     {
         switch (msg) {
         case WM_INITDIALOG: {
@@ -84,7 +84,7 @@ public:
 
 private:
     bool m_initialising{false};
-    cui::prefs::PreferencesTabHelper m_helper{{IDC_TITLE1, IDC_TITLE2}};
+    cui::prefs::PreferencesTabHelper m_helper{IDC_TITLE1, IDC_TITLE2};
 } g_tab_artwork;
 
 PreferencesTab* g_get_tab_artwork()

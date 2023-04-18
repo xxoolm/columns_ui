@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "notification_area.h"
 #include "main_window.h"
@@ -11,15 +11,14 @@ void update_systray(bool balloon, int btitle, bool force_balloon)
 {
     if (g_icon_created) {
         metadb_handle_ptr track;
-        static_api_ptr_t<play_control> play_api;
+        const auto play_api = play_control::get();
         play_api->get_now_playing(track);
         pfc::string8 sys;
         pfc::string8 title;
 
         if (track.is_valid()) {
             service_ptr_t<titleformat_object> to_systray;
-            static_api_ptr_t<titleformat_compiler>()->compile_safe(
-                to_systray, main_window::config_notification_icon_script.get());
+            titleformat_compiler::get()->compile_safe(to_systray, main_window::config_notification_icon_script.get());
             play_api->playback_format_title_ex(
                 track, nullptr, title, to_systray, nullptr, play_control::display_level_titles);
 
@@ -32,18 +31,18 @@ void update_systray(bool balloon, int btitle, bool force_balloon)
         uFixAmpersandChars(title, sys);
 
         if (balloon && (cfg_balloon || force_balloon)) {
-            uShellNotifyIconEx(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTICATION_ICON, g_icon, sys, "", "");
-            uShellNotifyIconEx(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTICATION_ICON, g_icon, sys,
+            uShellNotifyIconEx(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTIFICATION_ICON, g_icon, sys, "", "");
+            uShellNotifyIconEx(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTIFICATION_ICON, g_icon, sys,
                 (btitle == 0 ? "Now playing:" : (btitle == 1 ? "Unpaused:" : "Paused:")), title);
         } else
-            uShellNotifyIcon(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTICATION_ICON, g_icon, sys);
+            uShellNotifyIcon(NIM_MODIFY, cui::main_window.get_wnd(), 1, MSG_NOTIFICATION_ICON, g_icon, sys);
     }
 }
 
 void destroy_systray_icon()
 {
     if (g_icon_created) {
-        uShellNotifyIcon(NIM_DELETE, cui::main_window.get_wnd(), 1, MSG_NOTICATION_ICON, nullptr, nullptr);
+        uShellNotifyIcon(NIM_DELETE, cui::main_window.get_wnd(), 1, MSG_NOTIFICATION_ICON, nullptr, nullptr);
         g_icon_created = false;
     }
 }
@@ -68,8 +67,8 @@ void on_show_notification_area_icon_change()
 
 void create_systray_icon()
 {
-    uShellNotifyIcon(g_icon_created ? NIM_MODIFY : NIM_ADD, cui::main_window.get_wnd(), 1, MSG_NOTICATION_ICON, g_icon,
-        core_version_info_v2::get()->get_name());
+    uShellNotifyIcon(g_icon_created ? NIM_MODIFY : NIM_ADD, cui::main_window.get_wnd(), 1, MSG_NOTIFICATION_ICON,
+        g_icon, core_version_info_v2::get()->get_name());
     /* There was some misbehaviour with the newer messages. So we don't use them. */
     //    if (!g_icon_created)
     //        uih::shell_notify_icon(NIM_SETVERSION, cui::main_window.get_wnd(), 1, NOTIFYICON_VERSION,
@@ -89,5 +88,5 @@ void create_icon_handle()
         g_icon
             = (HICON)uLoadImage(core_api::get_my_instance(), cfg_tray_icon_path, IMAGE_ICON, cx, cy, LR_LOADFROMFILE);
     if (!g_icon)
-        g_icon = static_api_ptr_t<ui_control>()->load_main_icon(cx, cy);
+        g_icon = ui_control::get()->load_main_icon(cx, cy);
 }

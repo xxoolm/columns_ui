@@ -1,6 +1,20 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "tab_fonts.h"
+
+namespace {
+
+std::string format_font_description(const LOGFONT& lf)
+{
+    const auto dpi = uih::get_system_dpi_cached().cy;
+    const auto pt = -MulDiv(lf.lfHeight, 72, dpi);
+    const auto face = pfc::stringcvt::string_utf8_from_wide(lf.lfFaceName, std::size(lf.lfFaceName));
+
+    return fmt::format(
+        "{} {}pt{}{}", face.get_ptr(), pt, lf.lfWeight == FW_BOLD ? " bold"sv : ""sv, lf.lfItalic ? " italic"sv : ""sv);
+}
+
+} // namespace
 
 bool TabFonts::is_active()
 {
@@ -26,26 +40,26 @@ HWND TabFonts::create(HWND wnd)
 
 void TabFonts::apply() {}
 
-BOOL TabFonts::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+INT_PTR TabFonts::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
     case WM_INITDIALOG: {
         m_wnd = wnd;
-        m_wnd_colours_mode = GetDlgItem(wnd, IDC_COLOURS_MODE);
-        m_wnd_colours_element = GetDlgItem(wnd, IDC_COLOURS_ELEMENT);
+        m_wnd_colours_mode = GetDlgItem(wnd, IDC_FONT_MODE);
+        m_wnd_colours_element = GetDlgItem(wnd, IDC_FONT_ELEMENT);
 
         FontsClientList::g_get_list(m_fonts_client_list);
 
         ComboBox_AddString(m_wnd_colours_element, L"Common (list items)");
         ComboBox_AddString(m_wnd_colours_element, L"Common (labels)");
 
-        t_size count = m_fonts_client_list.get_count();
-        for (t_size i = 0; i < count; i++)
+        size_t count = m_fonts_client_list.get_count();
+        for (size_t i = 0; i < count; i++)
             ComboBox_AddString(
                 m_wnd_colours_element, pfc::stringcvt::string_os_from_utf8(m_fonts_client_list[i].m_name));
 
         ComboBox_SetCurSel(m_wnd_colours_element, 0);
-        m_element_ptr = g_fonts_manager_data.m_common_items_entry;
+        m_element_ptr = g_font_manager_data.m_common_items_entry;
 
         update_mode_combobox();
         update_font_desc();
@@ -71,24 +85,24 @@ BOOL TabFonts::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 on_font_changed();
             }
         } break;
-        case IDC_COLOURS_MODE | (CBN_SELCHANGE << 16): {
+        case IDC_FONT_MODE | (CBN_SELCHANGE << 16): {
             int idx = ComboBox_GetCurSel((HWND)lp);
             m_element_ptr->font_mode = (cui::fonts::font_mode_t)ComboBox_GetItemData((HWND)lp, idx);
             update_font_desc();
             update_change();
             on_font_changed();
         } break;
-        case IDC_COLOURS_ELEMENT | (CBN_SELCHANGE << 16): {
+        case IDC_FONT_ELEMENT | (CBN_SELCHANGE << 16): {
             int idx = ComboBox_GetCurSel((HWND)lp);
             m_element_api.release();
             if (idx != -1) {
                 if (idx == 0)
-                    m_element_ptr = g_fonts_manager_data.m_common_items_entry;
+                    m_element_ptr = g_font_manager_data.m_common_items_entry;
                 else if (idx == 1)
-                    m_element_ptr = g_fonts_manager_data.m_common_labels_entry;
+                    m_element_ptr = g_font_manager_data.m_common_labels_entry;
                 else if (idx >= 2) {
                     m_element_api = m_fonts_client_list[idx - 2].m_ptr;
-                    g_fonts_manager_data.find_by_guid(m_fonts_client_list[idx - 2].m_guid, m_element_ptr);
+                    g_font_manager_data.find_by_guid(m_fonts_client_list[idx - 2].m_guid, m_element_ptr);
                 }
             }
             update_mode_combobox();
@@ -107,13 +121,13 @@ void TabFonts::on_font_changed()
     if (m_element_api.is_valid())
         m_element_api->on_font_changed();
     else {
-        t_size index_element = ComboBox_GetCurSel(m_wnd_colours_element);
+        const auto index_element = ComboBox_GetCurSel(m_wnd_colours_element);
         if (index_element <= 1) {
-            g_fonts_manager_data.g_on_common_font_changed(1 << index_element);
-            t_size count = m_fonts_client_list.get_count();
-            for (t_size i = 0; i < count; i++) {
-                FontsManagerData::entry_ptr_t p_data;
-                g_fonts_manager_data.find_by_guid(m_fonts_client_list[i].m_guid, p_data);
+            g_font_manager_data.g_on_common_font_changed(1 << index_element);
+            size_t count = m_fonts_client_list.get_count();
+            for (size_t i = 0; i < count; i++) {
+                FontManagerData::entry_ptr_t p_data;
+                g_font_manager_data.find_by_guid(m_fonts_client_list[i].m_guid, p_data);
                 if (index_element == 0 && p_data->font_mode == cui::fonts::font_mode_common_items) {
                     m_fonts_client_list[i].m_ptr->on_font_changed();
                 } else if (index_element == 1 && p_data->font_mode == cui::fonts::font_mode_common_labels)
@@ -127,7 +141,7 @@ void TabFonts::update_font_desc()
 {
     LOGFONT lf;
     get_font(lf);
-    uSetWindowText(GetDlgItem(m_wnd, IDC_FONT_DESC), StringFontDesc(lf));
+    uSetWindowText(GetDlgItem(m_wnd, IDC_FONT_DESC), format_font_description(lf).c_str());
 }
 
 void TabFonts::update_change()
@@ -137,18 +151,18 @@ void TabFonts::update_change()
 
 void TabFonts::get_font(LOGFONT& lf)
 {
-    t_size index_element = ComboBox_GetCurSel(m_wnd_colours_element);
+    size_t index_element = ComboBox_GetCurSel(m_wnd_colours_element);
     if (index_element <= 1)
-        static_api_ptr_t<cui::fonts::manager>()->get_font(cui::fonts::font_type_t(index_element), lf);
+        fb2k::std_api_get<cui::fonts::manager>()->get_font(cui::fonts::font_type_t(index_element), lf);
     else
-        static_api_ptr_t<cui::fonts::manager>()->get_font(m_element_api->get_client_guid(), lf);
+        fb2k::std_api_get<cui::fonts::manager>()->get_font(m_element_api->get_client_guid(), lf);
 }
 
 void TabFonts::update_mode_combobox()
 {
     ComboBox_ResetContent(m_wnd_colours_mode);
-    t_size index;
-    t_size index_element = ComboBox_GetCurSel(m_wnd_colours_element);
+    size_t index;
+    size_t index_element = ComboBox_GetCurSel(m_wnd_colours_element);
     if (index_element <= 1) {
         index = ComboBox_AddString(m_wnd_colours_mode, L"System");
         ComboBox_SetItemData(m_wnd_colours_mode, index, cui::fonts::font_mode_system);

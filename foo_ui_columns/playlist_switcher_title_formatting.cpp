@@ -1,5 +1,7 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "playlist_switcher_title_formatting.h"
+
+#include "metadb_helpers.h"
 #include "title_formatting.h"
 
 namespace cui {
@@ -8,7 +10,7 @@ namespace {
 
 class LazyFieldCalculator {
 public:
-    LazyFieldCalculator(size_t playlist_index) : m_playlist_index(playlist_index) {}
+    explicit LazyFieldCalculator(size_t playlist_index) : m_playlist_index(playlist_index) {}
 
     t_filesize total_file_size()
     {
@@ -21,7 +23,7 @@ public:
     double total_duration()
     {
         if (!m_total_duration)
-            m_total_duration = tracks().calc_total_duration();
+            m_total_duration = helpers::calculate_tracks_total_length(tracks());
 
         return *m_total_duration;
     }
@@ -42,12 +44,12 @@ private:
     std::optional<double> m_total_duration;
     std::optional<t_filesize> m_total_file_size;
     std::optional<metadb_handle_list_t<pfc::alloc_fast_aggressive>> m_tracks;
-    static_api_ptr_t<playlist_manager_v3> m_playlist_api;
+    const playlist_manager_v3::ptr m_playlist_api = playlist_manager_v3::get();
 };
 
 } // namespace
 
-pfc::string8 format_playlist_title(unsigned index)
+pfc::string8 format_playlist_title(size_t index)
 {
     auto playlist_api = playlist_manager_v3::get();
     auto playback_api = playback_control::get();

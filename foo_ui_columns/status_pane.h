@@ -3,9 +3,11 @@
 
 namespace cui::status_pane {
 
+extern fbh::ConfigString status_pane_script;
+extern ConfigMenuItem double_click_action;
+
 class StatusPane
-    : public ui_helpers::container_window
-    , private playlist_callback_single
+    : playlist_callback_single
     , play_callback {
     class StatusPaneVolumeBarAttributes {
     public:
@@ -18,7 +20,7 @@ class StatusPane
     class StatusPaneTitleformatHook : public titleformat_hook {
     public:
         bool process_field(
-            titleformat_text_out* p_out, const char* p_name, unsigned p_name_length, bool& p_found_flag) override
+            titleformat_text_out* p_out, const char* p_name, size_t p_name_length, bool& p_found_flag) override
         {
             p_found_flag = false;
             if (!stricmp_utf8_ex(p_name, p_name_length, "is_status_pane", pfc_infinite)) {
@@ -29,7 +31,7 @@ class StatusPane
             return false;
         }
 
-        bool process_function(titleformat_text_out* p_out, const char* p_name, unsigned p_name_length,
+        bool process_function(titleformat_text_out* p_out, const char* p_name, size_t p_name_length,
             titleformat_hook_function_params* p_params, bool& p_found_flag) override
         {
             p_found_flag = false;
@@ -37,24 +39,17 @@ class StatusPane
         }
 
         StatusPaneTitleformatHook() = default;
-
-    private:
     };
-
-    class_data& get_class_data() const override
-    {
-        __implement_get_class_data_child_ex3(L"CUI_STATUS_PAIN", false, true, CS_DBLCLKS, IDC_ARROW);
-    }
 
     /** PLAYLIST CALLBACKS */
     void on_items_added(
-        t_size p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override
+        size_t p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override
     {
         on_playlist_change();
     }
-    void on_items_reordered(const t_size* p_order, t_size p_count) override {}
-    void on_items_removing(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override {}
-    void on_items_removed(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override
+    void on_items_reordered(const size_t* p_order, size_t p_count) override {}
+    void on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override {}
+    void on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override
     {
         on_playlist_change();
     }
@@ -62,21 +57,21 @@ class StatusPane
     {
         on_playlist_change();
     }
-    void on_item_focus_change(t_size p_from, t_size p_to) override {}
+    void on_item_focus_change(size_t p_from, size_t p_to) override {}
     void on_items_modified(const bit_array& p_mask) override {}
     void on_items_modified_fromplayback(const bit_array& p_mask, play_control::t_display_level p_level) override {}
     void on_items_replaced(const bit_array& p_mask,
         const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data) override
     {
     }
-    void on_item_ensure_visible(t_size p_idx) override {}
+    void on_item_ensure_visible(size_t p_idx) override {}
 
     void on_playlist_switch() override { on_playlist_change(); }
-    void on_playlist_renamed(const char* p_new_name, t_size p_new_name_len) override {}
+    void on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) override {}
     void on_playlist_locked(bool p_locked) override {}
 
     void on_default_format_changed() override {}
-    void on_playback_order_changed(t_size p_new_index) override {}
+    void on_playback_order_changed(size_t p_new_index) override {}
 
     /** PLAY CALLBACKS */
     void on_playback_starting(play_control::t_track_command p_command, bool p_paused) override
@@ -143,7 +138,7 @@ class StatusPane
         update_playlist_data();
         invalidate_all();
     }
-    void invalidate_all(bool b_update = true)
+    void invalidate_all(bool b_update = true) const
     {
         RedrawWindow(get_wnd(), nullptr, nullptr, RDW_INVALIDATE | (b_update ? RDW_UPDATENOW : NULL));
     }
@@ -151,31 +146,33 @@ class StatusPane
 
     void update_playback_status_text();
 
-    void update_playing_text()
-    {
-        metadb_handle_ptr track;
-        static_api_ptr_t<play_control> play_api;
-        play_api->get_now_playing(track);
-        if (track.is_valid()) {
-            service_ptr_t<titleformat_object> to_status;
-            static_api_ptr_t<titleformat_compiler>()->compile_safe(
-                to_status, main_window::config_status_bar_script.get());
-            StatusPaneTitleformatHook tf_hook;
-            play_api->playback_format_title_ex(
-                track, &tf_hook, playing1, to_status, nullptr, play_control::display_level_all);
-
-            track.release();
-        } else {
-            playing1.reset();
-        }
-    }
-    void get_length_data(bool& p_selection, t_size& p_count, pfc::string_base& p_out);
+    void update_playing_text();
+    void get_length_data(bool& p_selection, size_t& p_count, pfc::string_base& p_out);
 
 public:
-    StatusPane() = default;
-    t_size get_ideal_height()
+    StatusPane()
     {
-        return uGetFontHeight(m_font.get()) * 2 + uih::scale_dpi_value(2) + uih::scale_dpi_value(4)
+        m_window = std::make_unique<uie::container_window_v3>(
+            uie::container_window_v3_config(L"columns_ui_status_pane_mN4A3Qy1Spk", false, CS_DBLCLKS),
+            [this](auto&&... args) { return on_message(std::forward<decltype(args)>(args)...); });
+    }
+
+    HWND create(HWND parent) const { return m_window->create(parent); }
+    void destroy() const { m_window->destroy(); }
+    HWND get_wnd() const { return m_window->get_wnd(); }
+
+    void refresh_playing_text_section()
+    {
+        if (!get_wnd())
+            return;
+
+        update_playing_text();
+        invalidate_all();
+    }
+
+    int get_ideal_height() const
+    {
+        return uih::get_font_height(m_font.get()) * 2 + uih::scale_dpi_value(2) + uih::scale_dpi_value(4)
             + uih::scale_dpi_value(3) * 2;
     }
     void enter_menu_mode(const char* p_text)
@@ -190,7 +187,7 @@ public:
         m_menu_text.reset();
         invalidate_all();
     }
-    LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
+    LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
 
     void on_font_changed();
 
@@ -198,7 +195,7 @@ public:
 
 private:
     bool m_selection{false};
-    t_size m_item_count{0};
+    size_t m_item_count{0};
     pfc::string8 m_length_text;
     pfc::string8 m_track_label;
     pfc::string8_fast_aggressive playing1;
@@ -206,6 +203,7 @@ private:
     bool m_menu_active{false};
     wil::unique_hfont m_font;
     HTHEME m_theme{nullptr};
+    std::unique_ptr<uie::container_window_v3> m_window;
     std::unique_ptr<colours::dark_mode_notifier> m_dark_mode_notifier;
 };
 

@@ -1,7 +1,8 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "fcl.h"
 #include "ng_playlist/ng_playlist_groups.h"
 #include "ng_playlist/ng_playlist.h"
+#include "status_pane.h"
 
 namespace cui::panels::playlist_view {
 
@@ -39,15 +40,15 @@ class PlaylistViewColumnsDataSet : public fcl::dataset {
         static const GUID guid = {0x2415aae7, 0x7f5e, 0x4ad8, {0x94, 0xe2, 0x1e, 0x73, 0xa, 0x21, 0x39, 0xef}};
         return guid;
     }
-    void get_data(stream_writer* p_writer, t_uint32 type, fcl::t_export_feedback& feedback,
+    void get_data(stream_writer* p_writer, uint32_t type, fcl::t_export_feedback& feedback,
         abort_callback& p_abort) const override
     {
         fbh::fcl::Writer out(p_writer, p_abort);
-        t_size count = g_columns.get_count();
+        size_t count = g_columns.get_count();
         pfc::string8 temp;
-        out.write_raw(count);
+        out.write_raw(gsl::narrow<uint32_t>(count));
 
-        for (t_size i = 0; i < count; i++) {
+        for (size_t i = 0; i < count; i++) {
             stream_writer_memblock sw;
             fbh::fcl::Writer w(&sw, p_abort);
             w.write_item(identifier_name, g_columns[i]->name);
@@ -59,25 +60,24 @@ class PlaylistViewColumnsDataSet : public fcl::dataset {
             w.write_item(identifier_use_style, g_columns[i]->use_custom_colour);
             w.write_item(identifier_use_sort, g_columns[i]->use_custom_sort);
             w.write_item(identifier_show, g_columns[i]->show);
-            w.write_item(identifier_filter_type, (t_uint32)g_columns[i]->filter_type);
-            w.write_item(identifier_alignment, (t_uint32)g_columns[i]->align);
+            w.write_item(identifier_filter_type, (uint32_t)g_columns[i]->filter_type);
+            w.write_item(identifier_alignment, (uint32_t)g_columns[i]->align);
             w.write_item(identifier_resize, g_columns[i]->parts);
             w.write_item(identifier_width, g_columns[i]->width.value);
             w.write_item(identifier_width_dpi, g_columns[i]->width.dpi);
 
-            out.write_item(identifier_column, sw.m_data.get_ptr(), sw.m_data.get_size());
+            out.write_item(identifier_column, sw.m_data.get_ptr(), gsl::narrow<uint32_t>(sw.m_data.get_size()));
         }
     }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, fcl::t_import_feedback& feedback,
+    void set_data(stream_reader* p_reader, size_t stream_size, uint32_t type, fcl::t_import_feedback& feedback,
         abort_callback& p_abort) override
     {
         fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_size count;
-        reader.read_item(count);
+        const auto count = reader.read_item<uint32_t>();
         ColumnList newcolumns;
-        for (t_size i = 0; i < count; i++) {
-            t_uint32 column_id;
-            t_uint32 column_size;
+        for (size_t i = 0; i < count; i++) {
+            uint32_t column_id;
+            uint32_t column_size;
 
             reader.read_item(column_id);
             reader.read_item(column_size);
@@ -86,8 +86,8 @@ class PlaylistViewColumnsDataSet : public fcl::dataset {
 
             fbh::fcl::Reader reader2(reader, column_size, p_abort);
 
-            t_uint32 element_id;
-            t_uint32 element_size;
+            uint32_t element_id;
+            uint32_t element_size;
 
             auto dpiRead = false;
 
@@ -126,12 +126,12 @@ class PlaylistViewColumnsDataSet : public fcl::dataset {
                     break;
                 }
                 case identifier_alignment: {
-                    t_uint32 temp;
+                    uint32_t temp;
                     reader2.read_item(temp);
                     item->align = ((Alignment)temp);
                 } break;
                 case identifier_filter_type: {
-                    t_uint32 temp;
+                    uint32_t temp;
                     reader2.read_item(temp);
                     item->filter_type = ((PlaylistFilterType)temp);
                 } break;
@@ -186,7 +186,7 @@ class PlaylistViewGroupsDataSet : public fcl::dataset {
         static const GUID guid = {0xa89f68c6, 0xb40a, 0x4200, {0xba, 0x2a, 0x68, 0x99, 0x9f, 0x70, 0x4f, 0xfd}};
         return guid;
     }
-    void get_data(stream_writer* p_writer, t_uint32 type, fcl::t_export_feedback& feedback,
+    void get_data(stream_writer* p_writer, uint32_t type, fcl::t_export_feedback& feedback,
         abort_callback& p_abort) const override
     {
         fbh::fcl::Writer out(p_writer, p_abort);
@@ -200,31 +200,33 @@ class PlaylistViewGroupsDataSet : public fcl::dataset {
         fbh::fcl::Writer groups_writer(&groups_sw, p_abort);
 
         const pfc::list_base_const_t<Group>& groups = g_groups.get_groups();
-        t_size count = groups.get_count();
+        size_t count = groups.get_count();
         pfc::string8 temp;
 
-        groups_writer.write_raw(count);
+        groups_writer.write_raw(gsl::narrow<uint32_t>(count));
 
-        for (t_size i = 0; i < count; i++) {
+        for (size_t i = 0; i < count; i++) {
             const Group& group = groups[i];
             stream_writer_memblock sw;
             fbh::fcl::Writer w(&sw, p_abort);
             w.write_item(identifier_script, group.string);
-            w.write_item(identifier_playlist_filter_mode, (t_uint32)group.filter_type);
+            w.write_item(identifier_playlist_filter_mode, (uint32_t)group.filter_type);
             w.write_item(identifier_playlist_filter_string, group.filter_playlists);
 
-            groups_writer.write_item(identifier_group, sw.m_data.get_ptr(), sw.m_data.get_size());
+            groups_writer.write_item(
+                identifier_group, sw.m_data.get_ptr(), gsl::narrow<uint32_t>(sw.m_data.get_size()));
         }
 
-        out.write_item(identifier_groups, groups_sw.m_data.get_ptr(), groups_sw.m_data.get_size());
+        out.write_item(
+            identifier_groups, groups_sw.m_data.get_ptr(), gsl::narrow<uint32_t>(groups_sw.m_data.get_size()));
     }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, fcl::t_import_feedback& feedback,
+    void set_data(stream_reader* p_reader, size_t stream_size, uint32_t type, fcl::t_import_feedback& feedback,
         abort_callback& p_abort) override
     {
         fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
 
-        t_uint32 element_id;
-        t_uint32 element_size;
+        uint32_t element_id;
+        uint32_t element_size;
 
         pfc::list_t<Group> newgroups;
         bool b_groups_set = false;
@@ -247,11 +249,10 @@ class PlaylistViewGroupsDataSet : public fcl::dataset {
             //    reader.read_item(pvt::cfg_artwork_width);
             //    break;
             case identifier_groups: {
-                t_size count;
-                reader.read_item(count);
-                for (t_size i = 0; i < count; i++) {
-                    t_uint32 group_id;
-                    t_uint32 group_size;
+                const auto count = reader.read_item<uint32_t>();
+                for (size_t i = 0; i < count; i++) {
+                    uint32_t group_id;
+                    uint32_t group_size;
 
                     reader.read_item(group_id);
                     reader.read_item(group_size);
@@ -260,8 +261,8 @@ class PlaylistViewGroupsDataSet : public fcl::dataset {
 
                     fbh::fcl::Reader reader2(reader, group_size, p_abort);
 
-                    t_uint32 group_element_id;
-                    t_uint32 group_element_size;
+                    uint32_t group_element_id;
+                    uint32_t group_element_size;
 
                     while (reader2.get_remaining()) {
                         reader2.read_item(group_element_id);
@@ -272,7 +273,7 @@ class PlaylistViewGroupsDataSet : public fcl::dataset {
                             reader2.read_item(item.string, group_element_size);
                             break;
                         case identifier_playlist_filter_mode: {
-                            t_uint32 temp;
+                            uint32_t temp;
                             reader2.read_item(temp);
                             item.filter_type = (PlaylistFilterType&)temp;
                         } break;
@@ -323,7 +324,7 @@ class PlaylistViewMiscDataSet : public fcl::dataset {
         static const GUID guid = {0x190f4811, 0x899a, 0x4366, {0xa1, 0x81, 0xff, 0x51, 0x61, 0xfc, 0x1c, 0x77}};
         return guid;
     }
-    void get_data(stream_writer* p_writer, t_uint32 type, fcl::t_export_feedback& feedback,
+    void get_data(stream_writer* p_writer, uint32_t type, fcl::t_export_feedback& feedback,
         abort_callback& p_abort) const override
     {
         fbh::fcl::Writer out(p_writer, p_abort);
@@ -336,12 +337,12 @@ class PlaylistViewMiscDataSet : public fcl::dataset {
         out.write_item(identifier_use_dates, static_cast<int32_t>(true));
         out.write_item(identifier_use_globals, cfg_global);
     }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, fcl::t_import_feedback& feedback,
+    void set_data(stream_reader* p_reader, size_t stream_size, uint32_t type, fcl::t_import_feedback& feedback,
         abort_callback& p_abort) override
     {
         fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_uint32 element_id;
-        t_uint32 element_size;
+        uint32_t element_id;
+        uint32_t element_size;
 
         while (reader.get_remaining()) {
             reader.read_item(element_id);
@@ -388,6 +389,7 @@ class TitlesDataSet : public fcl::dataset {
         identifier_notification_icon_tooltip,
         identifier_copy_command,
         identifier_playlist,
+        identifier_status_pane,
     };
     void get_name(pfc::string_base& p_out) const override { p_out = "Titles"; }
     const GUID& get_group() const override { return fcl::groups::titles_common; }
@@ -397,25 +399,29 @@ class TitlesDataSet : public fcl::dataset {
         static const GUID guid = {0x9af6a28b, 0x3eff, 0x4d1a, {0xad, 0x81, 0xfa, 0x17, 0x59, 0xf1, 0xd6, 0x6c}};
         return guid;
     }
-    void get_data(stream_writer* p_writer, t_uint32 type, fcl::t_export_feedback& feedback,
+    void get_data(stream_writer* p_writer, uint32_t type, fcl::t_export_feedback& feedback,
         abort_callback& p_abort) const override
     {
         fbh::fcl::Writer out(p_writer, p_abort);
 
         out.write_item(identifier_status_bar, main_window::config_status_bar_script.get());
+        out.write_item(identifier_status_pane, status_pane::status_pane_script);
         out.write_item(identifier_notification_icon_tooltip, main_window::config_notification_icon_script.get());
         out.write_item(identifier_main_window_title, main_window::config_main_window_title_script.get());
     }
-    void set_data(stream_reader* p_reader, t_size stream_size, t_uint32 type, fcl::t_import_feedback& feedback,
+    void set_data(stream_reader* p_reader, size_t stream_size, uint32_t type, fcl::t_import_feedback& feedback,
         abort_callback& p_abort) override
     {
         fbh::fcl::Reader reader(p_reader, stream_size, p_abort);
-        t_uint32 element_id;
-        t_uint32 element_size;
+        uint32_t element_id;
+        uint32_t element_size;
+        std::unordered_set<uint32_t> read_elements;
 
         while (reader.get_remaining()) {
             reader.read_item(element_id);
             reader.read_item(element_size);
+
+            read_elements.emplace(element_id);
 
             pfc::string8 buffer;
 
@@ -432,10 +438,18 @@ class TitlesDataSet : public fcl::dataset {
                 reader.read_item(buffer, element_size);
                 main_window::config_status_bar_script.set(buffer);
                 break;
+            case identifier_status_pane:
+                reader.read_item(buffer, element_size);
+                status_pane::status_pane_script = buffer;
+                break;
             default:
                 reader.skip(element_size);
                 break;
             }
+        }
+
+        if (read_elements.contains(identifier_status_bar) && !read_elements.contains(identifier_status_pane)) {
+            status_pane::status_pane_script = main_window::config_status_bar_script.get();
         }
     }
 };

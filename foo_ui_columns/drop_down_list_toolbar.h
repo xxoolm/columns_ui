@@ -1,7 +1,7 @@
 #pragma once
 
 template <class ToolbarArgs>
-class DropDownListToolbar : public ui_extension::container_ui_extension {
+class DropDownListToolbar : public ui_extension::container_uie_window_v3 {
 public:
     static void s_update_active_item_safe()
     {
@@ -61,10 +61,7 @@ public:
     void get_category(pfc::string_base& out) const override { out.set_string("Toolbars"); }
     bool is_available(const uie::window_host_ptr& p_host) const override { return ToolbarArgs::is_available(); }
     void get_menu_items(uie::menu_hook_t& p_hook) override { ToolbarArgs::get_menu_items(p_hook); }
-    class_data& get_class_data() const override
-    {
-        __implement_get_class_data_child_ex(ToolbarArgs::class_name, false, false);
-    }
+    uie::container_window_v3_config get_window_config() override { return {ToolbarArgs::class_name}; }
 
 private:
     class FontClient : public cui::fonts::client {
@@ -77,18 +74,18 @@ private:
     class ColourClient : public cui::colours::client {
         const GUID& get_client_guid() const override { return ToolbarArgs::colour_client_id; }
         void get_name(pfc::string_base& p_out) const override { p_out = ToolbarArgs::name; }
-        size_t get_supported_colours() const override
+        uint32_t get_supported_colours() const override
         {
             return cui::colours::colour_flag_text | cui::colours::colour_flag_background;
         }
-        size_t get_supported_bools() const override { return cui::colours::bool_flag_dark_mode_enabled; }
+        uint32_t get_supported_bools() const override { return cui::colours::bool_flag_dark_mode_enabled; }
         bool get_themes_supported() const override { return false; }
-        void on_bool_changed(t_size mask) const override
+        void on_bool_changed(uint32_t mask) const override
         {
             if (mask & cui::colours::bool_flag_dark_mode_enabled)
                 s_set_window_theme();
         }
-        void on_colour_changed(t_size mask) const override { s_update_colours(); }
+        void on_colour_changed(uint32_t mask) const override { s_update_colours(); }
     };
 
     static LRESULT WINAPI s_on_hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -107,7 +104,7 @@ private:
     int calculate_max_item_width();
     int calculate_height();
 
-    static constexpr unsigned ID_COMBOBOX = 1001;
+    static constexpr INT_PTR ID_COMBOBOX = 1001;
     static constexpr unsigned initial_height = 300;
     static constexpr unsigned initial_width = 150;
     static constexpr unsigned maximum_minimum_width = 150;
@@ -124,7 +121,7 @@ private:
     bool m_initialised{false};
     bool m_process_next_char{true};
     bool m_processing_selection_change{false};
-    t_int32 m_mousewheel_delta{0};
+    int32_t m_mousewheel_delta{0};
 };
 
 template <class ToolbarArgs>
@@ -217,7 +214,7 @@ int DropDownListToolbar<ToolbarArgs>::calculate_max_item_width()
     pfc::string8 text;
     for (auto index : ranges::views::iota(0, item_count)) {
         uComboBox_GetText(m_wnd_combo, index, text);
-        const auto cx = uih::get_text_width(dc.get(), text, text.get_length());
+        const auto cx = uih::get_text_width(dc.get(), text, gsl::narrow<int>(text.get_length()));
         max_item_width = std::max(max_item_width, cx);
     }
 
@@ -244,8 +241,8 @@ void DropDownListToolbar<ToolbarArgs>::update_active_item()
     const auto iter = std::find_if(
         m_items.begin(), m_items.end(), [id](auto&& item) { return std::get<typename ToolbarArgs::ID>(item) == id; });
 
-    const int sel_item_index = iter != m_items.end() ? iter - m_items.begin() : -1;
-    ComboBox_SetCurSel(m_wnd_combo, sel_item_index);
+    const ptrdiff_t sel_item_index = iter != m_items.end() ? iter - m_items.begin() : -1;
+    ComboBox_SetCurSel(m_wnd_combo, gsl::narrow<int>(sel_item_index));
 }
 
 template <class ToolbarArgs>
@@ -290,16 +287,15 @@ LRESULT DropDownListToolbar<ToolbarArgs>::on_message(HWND wnd, UINT msg, WPARAM 
             ToolbarArgs::on_last_window_destroyed();
         }
         std::erase(s_windows, this);
-
         m_initialised = false;
-        const unsigned count = get_class_data().refcount;
-        DestroyWindow(m_wnd_combo);
-        if (count == 1) {
+        break;
+    }
+    case WM_NCDESTROY:
+        if (s_windows.empty()) {
             s_items_font.reset();
             s_background_brush.reset();
         }
         break;
-    }
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORLISTBOX: {
         const auto dc = reinterpret_cast<HDC>(wp);
@@ -328,8 +324,13 @@ LRESULT DropDownListToolbar<ToolbarArgs>::on_message(HWND wnd, UINT msg, WPARAM 
             break;
         }
         case ID_COMBOBOX | CBN_DROPDOWN << 16: {
+            if constexpr (requires() { ToolbarArgs::on_click(); }) {
+                ToolbarArgs::on_click();
+            }
+
             if (ToolbarArgs::refresh_on_click)
                 refresh_all_items();
+
             break;
         }
         }

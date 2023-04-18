@@ -12,7 +12,8 @@ enum StatusBarPart : uint32_t {
     t_part_main = 1 << 0,
     t_part_lock = 1 << 1,
     t_part_length = 1 << 2,
-    t_part_volume = 1 << 3
+    t_part_count = 1 << 3,
+    t_part_volume = 1 << 4
 };
 
 enum class StatusBarPartID : ULONG_PTR {
@@ -20,6 +21,7 @@ enum class StatusBarPartID : ULONG_PTR {
     MenuItemDescription,
     PlaylistLock,
     TrackLength,
+    TrackCount,
     Volume,
 };
 
@@ -32,7 +34,6 @@ void set_menu_item_description(std::string_view text);
 void clear_menu_item_description();
 void create_window();
 void destroy_window();
-void on_status_font_change();
-std::optional<LRESULT> handle_draw_item(const LPDRAWITEMSTRUCT lpdis);
+std::optional<LRESULT> handle_draw_item(LPDRAWITEMSTRUCT lpdis);
 
 } // namespace cui::status_bar

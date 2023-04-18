@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "splitter_utils.h"
 
@@ -49,7 +49,7 @@ auto normalise_splitter_item(const uie::splitter_item_t* item)
     return normalised_item;
 }
 
-pfc::array_t<t_uint8> serialise_splitter_item(const uie::splitter_item_full_v3_impl_t* item)
+pfc::array_t<uint8_t> serialise_splitter_item(const uie::splitter_item_full_v3_impl_t* item)
 {
     stream_writer_memblock writer;
     abort_callback_dummy aborter;
@@ -70,23 +70,23 @@ pfc::array_t<t_uint8> serialise_splitter_item(const uie::splitter_item_full_v3_i
     writer.write_string(title.get_ptr(), aborter);
 
     auto panel_data = item->get_panel_config_to_array(true);
-    writer.write_lendian_t(panel_data.get_size(), aborter);
+    writer.write_lendian_t(gsl::narrow<uint32_t>(panel_data.get_size()), aborter);
     writer.write(panel_data.get_ptr(), panel_data.get_size(), aborter);
 
     writer.write_lendian_t(item->m_extra_data_format_id, aborter);
-    writer.write_lendian_t(item->m_extra_data.get_size(), aborter);
+    writer.write_lendian_t(gsl::narrow<uint32_t>(item->m_extra_data.get_size()), aborter);
     writer.write(item->m_extra_data.get_ptr(), item->m_extra_data.get_size(), aborter);
 
     return writer.m_data;
 }
 
-pfc::array_t<t_uint8> serialise_splitter_item(const uie::splitter_item_t* item)
+pfc::array_t<uint8_t> serialise_splitter_item(const uie::splitter_item_t* item)
 {
     auto normalised_item = normalise_splitter_item(item);
     return serialise_splitter_item(normalised_item.get());
 }
 
-std::unique_ptr<uie::splitter_item_full_v3_impl_t> deserialise_splitter_item(std::span<const t_uint8> data)
+std::unique_ptr<uie::splitter_item_full_v3_impl_t> deserialise_splitter_item(std::span<const uint8_t> data)
 {
     auto item = std::make_unique<uie::splitter_item_full_v3_impl_t>();
     stream_reader_memblock_ref reader(data.data(), data.size());
@@ -113,7 +113,7 @@ std::unique_ptr<uie::splitter_item_full_v3_impl_t> deserialise_splitter_item(std
     uint32_t panel_data_size{};
     reader.read_lendian_t(panel_data_size, aborter);
 
-    pfc::array_staticsize_t<t_uint8> panel_data{panel_data_size};
+    pfc::array_staticsize_t<uint8_t> panel_data{panel_data_size};
     reader.read(panel_data.get_ptr(), panel_data_size, aborter);
     item->set_panel_config_from_ptr(panel_data.get_ptr(), panel_data.get_size());
 

@@ -5,7 +5,7 @@
 namespace cui::artwork_panel {
 
 class ArtworkPanel
-    : public uie::container_ui_extension_t<>
+    : public uie::container_uie_window_v3
     , public now_playing_album_art_notify
     , public play_callback
     , public playlist_callback_single
@@ -14,7 +14,7 @@ public:
     class CompletionNotifyForwarder : public completion_notify {
     public:
         void on_completion(unsigned p_code) override;
-        CompletionNotifyForwarder(ArtworkPanel* p_this);
+        explicit CompletionNotifyForwarder(ArtworkPanel* p_this);
 
     private:
         service_ptr_t<ArtworkPanel> m_this;
@@ -43,15 +43,15 @@ public:
 
     enum { playlist_callback_flags = flag_on_items_selection_change | flag_on_playlist_switch };
     void on_playlist_switch() override;
-    void on_item_focus_change(t_size p_from, t_size p_to) override {}
+    void on_item_focus_change(size_t p_from, size_t p_to) override {}
 
     void on_items_added(
-        t_size p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override
+        size_t p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override
     {
     }
-    void on_items_reordered(const t_size* p_order, t_size p_count) override {}
-    void on_items_removing(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override {}
-    void on_items_removed(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override {}
+    void on_items_reordered(const size_t* p_order, size_t p_count) override {}
+    void on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override {}
+    void on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override {}
     void on_items_selection_change(const bit_array& p_affected, const bit_array& p_state) override;
     void on_items_modified(const bit_array& p_mask) override {}
     void on_items_modified_fromplayback(const bit_array& p_mask, play_control::t_display_level p_level) override {}
@@ -59,13 +59,13 @@ public:
         const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data) override
     {
     }
-    void on_item_ensure_visible(t_size p_idx) override {}
+    void on_item_ensure_visible(size_t p_idx) override {}
 
-    void on_playlist_renamed(const char* p_new_name, t_size p_new_name_len) override {}
+    void on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) override {}
     void on_playlist_locked(bool p_locked) override {}
 
     void on_default_format_changed() override {}
-    void on_playback_order_changed(t_size p_new_index) override {}
+    void on_playback_order_changed(size_t p_new_index) override {}
 
     void on_selection_changed(const pfc::list_base_const_t<metadb_handle_ptr>& p_selection) override;
 
@@ -79,30 +79,30 @@ public:
     ArtworkPanel();
 
 private:
-    class_data& get_class_data() const override;
+    uie::container_window_v3_config get_window_config() override;
 
     class MenuNodeTrackMode : public ui_extension::menu_node_command_t {
         service_ptr_t<ArtworkPanel> p_this;
-        t_size m_source;
+        uint32_t m_source;
 
     public:
-        static const char* get_name(t_size source);
+        static const char* get_name(uint32_t source);
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeTrackMode(ArtworkPanel* p_wnd, t_size p_value);
+        MenuNodeTrackMode(ArtworkPanel* p_wnd, uint32_t p_value);
     };
 
     class MenuNodeArtworkType : public ui_extension::menu_node_command_t {
         service_ptr_t<ArtworkPanel> p_this;
-        t_size m_type;
+        uint32_t m_type;
 
     public:
-        static const char* get_name(t_size source);
+        static const char* get_name(uint32_t source);
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeArtworkType(ArtworkPanel* p_wnd, t_size p_value);
+        MenuNodeArtworkType(ArtworkPanel* p_wnd, uint32_t p_value);
     };
 
     class MenuNodeSourcePopup : public ui_extension::menu_node_popup_t {
@@ -110,9 +110,9 @@ private:
 
     public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
-        unsigned get_children_count() const override;
-        void get_child(unsigned p_index, uie::menu_node_ptr& p_out) const override;
-        MenuNodeSourcePopup(ArtworkPanel* p_wnd);
+        size_t get_children_count() const override;
+        void get_child(size_t p_index, uie::menu_node_ptr& p_out) const override;
+        explicit MenuNodeSourcePopup(ArtworkPanel* p_wnd);
     };
 
     class MenuNodeTypePopup : public ui_extension::menu_node_popup_t {
@@ -120,9 +120,9 @@ private:
 
     public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
-        unsigned get_children_count() const override;
-        void get_child(unsigned p_index, uie::menu_node_ptr& p_out) const override;
-        MenuNodeTypePopup(ArtworkPanel* p_wnd);
+        size_t get_children_count() const override;
+        void get_child(size_t p_index, uie::menu_node_ptr& p_out) const override;
+        explicit MenuNodeTypePopup(ArtworkPanel* p_wnd);
     };
     class MenuNodePreserveAspectRatio : public ui_extension::menu_node_command_t {
         service_ptr_t<ArtworkPanel> p_this;
@@ -131,7 +131,7 @@ private:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodePreserveAspectRatio(ArtworkPanel* p_wnd);
+        explicit MenuNodePreserveAspectRatio(ArtworkPanel* p_wnd);
     };
 
     class MenuNodeOptions : public ui_extension::menu_node_command_t {
@@ -147,13 +147,13 @@ private:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeLockType(ArtworkPanel* p_wnd);
+        explicit MenuNodeLockType(ArtworkPanel* p_wnd);
     };
 
     void get_menu_items(ui_extension::menu_hook_t& p_hook) override;
     enum { current_stream_version = 3 };
 
-    void set_config(stream_reader* p_reader, t_size size, abort_callback& p_abort) override;
+    void set_config(stream_reader* p_reader, size_t size, abort_callback& p_abort) override;
     void get_config(stream_writer* p_writer, abort_callback& p_abort) const override;
 
     LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
@@ -173,7 +173,7 @@ private:
     wil::unique_hbitmap m_bitmap;
     size_t m_selected_artwork_type_index{0};
     std::optional<size_t> m_artwork_type_override_index{};
-    size_t m_track_mode;
+    uint32_t m_track_mode;
     bool m_preserve_aspect_ratio{true};
     bool m_lock_type{false};
     bool m_dynamic_artwork_pending{};

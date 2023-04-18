@@ -7,36 +7,36 @@ enum Orientation {
     vertical,
 };
 
-class FlatSplitterPanel : public uie::container_ui_extension_t<ui_helpers::container_window, uie::splitter_window_v2> {
+class FlatSplitterPanel : public uie::container_uie_window_v3_t<uie::splitter_window_v2> {
 public:
     virtual Orientation get_orientation() const = 0;
     static int g_get_caption_size();
     void get_category(pfc::string_base& p_out) const override;
     unsigned get_type() const override;
 
-    void insert_panel(unsigned index, const uie::splitter_item_t* p_item) override;
+    void insert_panel(size_t index, const uie::splitter_item_t* p_item) override;
 
-    void remove_panel(unsigned index) override;
-    void replace_panel(unsigned index, const uie::splitter_item_t* p_item) override;
+    void remove_panel(size_t index) override;
+    void replace_panel(size_t index, const uie::splitter_item_t* p_item) override;
 
-    unsigned get_panel_count() const override;
-    uie::splitter_item_t* get_panel(unsigned index) const override;
+    size_t get_panel_count() const override;
+    uie::splitter_item_t* get_panel(size_t index) const override;
     enum { stream_version_current = 0 };
 
-    void set_config(stream_reader* config, t_size p_size, abort_callback& p_abort) override;
-    void import_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort) override;
+    void set_config(stream_reader* config, size_t p_size, abort_callback& p_abort) override;
+    void import_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort) override;
     void export_config(stream_writer* p_writer, abort_callback& p_abort) const override;
 
     void get_config(stream_writer* out, abort_callback& p_abort) const override;
 
-    bool is_index_valid(unsigned index) const;
+    bool is_index_valid(size_t index) const;
 
-    bool get_config_item_supported(unsigned index, const GUID& p_type) const override;
+    bool get_config_item_supported(size_t index, const GUID& p_type) const override;
 
     bool get_config_item(
-        unsigned index, const GUID& p_type, stream_writer* p_out, abort_callback& p_abort) const override;
+        size_t index, const GUID& p_type, stream_writer* p_out, abort_callback& p_abort) const override;
 
-    bool set_config_item(unsigned index, const GUID& p_type, stream_reader* p_source, abort_callback& p_abort) override;
+    bool set_config_item(size_t index, const GUID& p_type, stream_reader* p_source, abort_callback& p_abort) override;
 
     class FlatSplitterPanelHost : public ui_extension::window_host_ex {
         service_ptr_t<FlatSplitterPanel> m_this;
@@ -84,20 +84,22 @@ private:
     };
     class Panel : public std::enable_shared_from_this<Panel> {
     public:
-        class PanelContainer
-            : public container_window
-            , private fbh::LowLevelMouseHookManager::HookCallback {
+        class PanelContainer : fbh::LowLevelMouseHookManager::HookCallback {
         public:
             enum { MSG_AUTOHIDE_END = WM_USER + 2 };
 
-            PanelContainer(Panel* p_panel);
+            explicit PanelContainer(Panel* p_panel);
 
             ~PanelContainer();
+
+            HWND create(HWND parent) const;
+            void destroy() const;
+            HWND get_wnd() const { return m_wnd; }
+
             void set_window_ptr(FlatSplitterPanel* p_ptr);
             void enter_autohide_hook();
             // private:
-            class_data& get_class_data() const override;
-            LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
+            LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
             void on_hooked_message(WPARAM msg, const MSLLHOOKSTRUCT& mllhs) override;
             service_ptr_t<FlatSplitterPanel> m_this;
 
@@ -112,7 +114,10 @@ private:
             void close_theme();
             bool test_autohide_window(HWND wnd);
 
+            inline constexpr static auto class_name = L"foo_ui_columns_splitter_panel_child_container";
+
             HWND m_wnd{};
+            std::unique_ptr<uie::container_window_v3> m_window;
             std::unique_ptr<colours::dark_mode_notifier> m_dark_mode_notifier;
         } m_container;
 
@@ -124,7 +129,7 @@ private:
         HWND m_wnd{nullptr};
         HWND m_wnd_child{nullptr};
         bool m_show_caption{true};
-        pfc::array_t<t_uint8> m_child_data;
+        pfc::array_t<uint8_t> m_child_data;
         SizeLimit m_size_limits;
         uie::window_ptr m_child;
         bool m_show_toggle_area{false};
@@ -160,21 +165,21 @@ private:
     };
     class PanelList : public pfc::list_t<std::shared_ptr<Panel>> {
     public:
-        bool find_by_wnd(HWND wnd, unsigned& p_out);
-        bool find_by_wnd_child(HWND wnd, unsigned& p_out);
+        bool find_by_wnd(HWND wnd, size_t& p_out);
+        bool find_by_wnd_child(HWND wnd, size_t& p_out);
     };
 
-    void read_config(stream_reader* p_reader, t_size p_size, bool is_import, abort_callback& p_abort);
+    void read_config(stream_reader* p_reader, size_t p_size, bool is_import, abort_callback& p_abort);
     void write_config(stream_writer* p_writer, bool is_export, abort_callback& p_abort) const;
 
-    void start_autohide_dehide(unsigned index, bool b_next_too = true);
+    void start_autohide_dehide(size_t index, bool b_next_too = true);
 
     LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
     void get_panels_sizes(unsigned width, unsigned height, pfc::list_base_t<unsigned>& p_out);
-    bool find_by_divider_pt(POINT& pt, unsigned& p_out);
-    bool test_divider_pt(const POINT& pt, unsigned p_out);
+    bool find_by_divider_pt(POINT& pt, size_t& p_out);
+    bool test_divider_pt(const POINT& pt, size_t p_out);
 
-    unsigned get_panel_divider_size(unsigned index);
+    int get_panel_divider_size(size_t index) const;
 
     void on_size_changed(unsigned width, unsigned height);
     void on_size_changed();
@@ -182,9 +187,9 @@ private:
 
     void save_sizes(unsigned width, unsigned height);
 
-    bool can_resize_divider(t_size index) const;
-    bool can_resize_panel(t_size index) const;
-    int override_size(unsigned& panel, int delta);
+    bool can_resize_divider(size_t index) const;
+    bool can_resize_panel(size_t index) const;
+    int override_size(size_t& panel, int delta);
 
     void refresh_children();
     void destroy_children();
@@ -193,8 +198,8 @@ private:
     PanelList m_panels;
     HWND m_wnd{nullptr};
 
-    int m_last_position{NULL};
-    unsigned m_panel_dragging{NULL};
+    int m_last_position{};
+    size_t m_panel_dragging{};
     bool m_panel_dragging_valid{false};
     std::unique_ptr<colours::dark_mode_notifier> m_dark_mode_notifier;
 
@@ -207,4 +212,4 @@ public:
     FlatSplitterPanel() = default;
 };
 
-}
+} // namespace cui::panels::splitter

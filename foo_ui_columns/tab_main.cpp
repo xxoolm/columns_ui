@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "fcl.h"
 #include "config.h"
 #include "rebar.h"
@@ -38,7 +38,7 @@ public:
         case WM_COMMAND:
             switch (wp) {
             case (EN_CHANGE << 16) | IDC_STRING:
-                main_window::config_main_window_title_script.set(string_utf8_from_window((HWND)lp));
+                main_window::config_main_window_title_script.set(uGetWindowText((HWND)lp));
                 break;
 
             case IDC_QUICKSETUP:
@@ -64,7 +64,7 @@ public:
                 main_window::config_set_transparency_enabled(SendMessage((HWND)lp, BM_GETCHECK, 0, 0) != 0);
                 break;
             case IDC_TOOLBARS:
-                cfg_toolbars = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_toolbars = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 on_show_toolbars_change();
                 break;
             case IDC_RESET_TOOLBARS: {
@@ -72,7 +72,6 @@ public:
                         _T("Warning! This will reset the toolbars to the default state. Continue?"),
                         _T("Reset toolbars?"), MB_YESNO)
                     == IDYES) {
-
                     if (cui::main_window.get_wnd())
                         cui::rebar::destroy_rebar();
                     cui::rebar::g_cfg_rebar.reset();
@@ -107,7 +106,7 @@ public:
         p_out = "http://yuo.be/wiki/columns_ui:config:main";
         return true;
     }
-    cui::prefs::PreferencesTabHelper m_helper{{IDC_TITLE1, IDC_TITLE2}};
+    cui::prefs::PreferencesTabHelper m_helper{IDC_TITLE1, IDC_TITLE2};
 } g_tab_main;
 
 PreferencesTab* g_get_tab_main()

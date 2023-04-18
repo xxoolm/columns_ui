@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "tab_layout.h"
 
@@ -164,7 +164,7 @@ void LayoutTab::insert_item(HWND wnd, HTREEITEM ti_parent, const GUID& p_guid, H
     if (p_parent->m_window.is_valid() && p_parent->m_window->service_query_t(p_splitter)) {
         auto& parent_children = p_parent->m_children;
 
-        unsigned index
+        const size_t index
             = ti_after != TVI_LAST ? tree_view_get_child_index(m_wnd_tree, ti_after) + 1 : parent_children.size();
         if (index <= parent_children.size()) {
             p_splitter->insert_panel(index, p_node->m_item->get_ptr());
@@ -187,8 +187,8 @@ bool LayoutTab::_fix_single_instance_recur(uie::splitter_window_ptr& p_window)
         return false;
 
     bool modified = false;
-    t_size i;
-    t_size count = p_window->get_panel_count();
+    size_t i;
+    size_t count = p_window->get_panel_count();
     pfc::array_staticsize_t<bool> mask(count);
 
     for (i = 0; i < count; i++) {
@@ -272,7 +272,7 @@ void LayoutTab::paste_item(HWND wnd, HTREEITEM ti_parent, HTREEITEM ti_after)
     auto p_parent = m_node_map.at(ti_parent);
     service_ptr_t<uie::splitter_window> p_splitter;
     if (p_parent->m_window.is_valid() && p_parent->m_window->service_query_t(p_splitter)) {
-        unsigned index{};
+        size_t index{};
         auto& parent_children = p_parent->m_children;
 
         if (ti_after == TVI_LAST)
@@ -350,7 +350,7 @@ void LayoutTab::switch_splitter(HWND wnd, HTREEITEM ti, const GUID& p_guid)
     uie::window_ptr window;
     service_ptr_t<uie::splitter_window> splitter;
     if (uie::window::create_by_guid(p_guid, window) && window->service_query_t(splitter)) {
-        unsigned count = std::min(old_node->m_children.size(), splitter->get_maximum_panel_count());
+        const auto count = std::min(old_node->m_children.size(), splitter->get_maximum_panel_count());
         if (count == old_node->m_children.size()
             || MessageBox(wnd, _T("The number of child items will not fit in the selected splitter type. Continue?"),
                    _T("Warning"), MB_YESNO | MB_ICONEXCLAMATION)
@@ -512,14 +512,14 @@ void LayoutTab::apply()
 
 void LayoutTab::initialise_presets(HWND wnd)
 {
-    unsigned count = cfg_layout.get_presets().get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = cfg_layout.get_presets().get_count();
+    for (size_t n = 0; n < count; n++) {
         uSendDlgItemMessageText(wnd, IDC_PRESETS, CB_ADDSTRING, 0, cfg_layout.get_presets()[n].m_name);
     }
     ComboBox_SetCurSel(GetDlgItem(wnd, IDC_PRESETS), m_active_preset);
 }
 
-void LayoutTab::switch_to_preset(HWND wnd, unsigned index)
+void LayoutTab::switch_to_preset(HWND wnd, size_t index)
 {
     if (index < cfg_layout.get_presets().get_count()) {
         if (m_changed)
@@ -531,11 +531,12 @@ void LayoutTab::switch_to_preset(HWND wnd, unsigned index)
     }
 }
 
-BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+INT_PTR LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
-    case WM_INITDIALOG: {
+    case WM_INITDIALOG:
         m_wnd_tree = GetDlgItem(wnd, IDC_TREE);
+        TreeView_SetIndent(m_wnd_tree, 0);
         uih::tree_view_set_explorer_theme(m_wnd_tree);
         cfg_layout.save_active_preset();
         if (!cfg_layout.get_presets().get_count())
@@ -553,7 +554,7 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         uSendDlgItemMessageText(wnd, IDC_CAPTIONSTYLE, CB_ADDSTRING, 0, "Vertical");
 
         m_initialised = true;
-    } break;
+        break;
     case WM_DESTROY:
         m_initialised = false;
         apply();
@@ -569,7 +570,7 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             const auto preset_name = helpers::show_rename_dialog_box(wnd, "New preset: Enter name", "New preset");
 
             if (preset_name) {
-                t_size index = cfg_layout.add_preset(*preset_name);
+                size_t index = cfg_layout.add_preset(*preset_name);
                 uSendDlgItemMessageText(wnd, IDC_PRESETS, CB_ADDSTRING, NULL, preset_name->get_ptr());
                 SendDlgItemMessage(wnd, IDC_PRESETS, CB_SETCURSEL, index, NULL);
                 switch_to_preset(wnd, index);
@@ -613,7 +614,7 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_DELETE_PRESET: {
             deinitialise_tree(wnd);
             HWND wnd_combo = GetDlgItem(wnd, IDC_PRESETS);
-            t_size count = cfg_layout.delete_preset(m_active_preset);
+            size_t count = cfg_layout.delete_preset(m_active_preset);
             ComboBox_DeleteString(wnd_combo, m_active_preset);
             if (!count) {
                 cfg_layout.reset_presets();
@@ -656,7 +657,7 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         } break;
         case IDC_CUSTOM_TITLE | (EN_CHANGE << 16):
             if (!m_initialising) {
-                string_utf8_from_window text((HWND)lp);
+                const auto text = uGetWindowText((HWND)lp);
                 stream_writer_memblock str;
                 abort_callback_impl p_abort;
                 str.write_string(text, p_abort);
@@ -678,7 +679,7 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             break;
         case (CBN_SELCHANGE << 16) | IDC_CAPTIONSTYLE:
             set_item_property(wnd, uie::splitter_window::uint32_orientation,
-                (t_uint32)(SendMessage((HWND)lp, CB_GETCURSEL, 0, 0) ? 1 : 0));
+                (uint32_t)(SendMessage((HWND)lp, CB_GETCURSEL, 0, 0) ? 1 : 0));
             break;
         case IDC_CONFIGURE:
             run_configure(wnd);
@@ -735,13 +736,13 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 ti.pt = pt;
                 ScreenToClient(m_wnd_tree, &ti.pt);
             }
-            SendMessage(m_wnd_tree, TVM_HITTEST, 0, (long)&ti);
+            SendMessage(m_wnd_tree, TVM_HITTEST, 0, reinterpret_cast<LPARAM>(&ti));
             if (ti.hItem) {
                 enum { ID_REMOVE = 1, ID_MOVE_UP, ID_MOVE_DOWN, ID_COPY, ID_PASTE, ID_CHANGE_BASE };
                 unsigned ID_INSERT_BASE = ID_CHANGE_BASE + 1;
                 HTREEITEM ti_parent = TreeView_GetParent(m_wnd_tree, ti.hItem);
 
-                SendMessage(m_wnd_tree, TVM_SELECTITEM, TVGN_CARET, (long)ti.hItem);
+                SendMessage(m_wnd_tree, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(ti.hItem));
 
                 unsigned index = tree_view_get_child_index(m_wnd_tree, ti.hItem);
 
@@ -764,53 +765,58 @@ BOOL LayoutTab::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (!ti_parent) {
                     HMENU menu_change_base = CreatePopupMenu();
                     HMENU popup = nullptr;
-                    unsigned count = panels.get_count();
-                    for (unsigned n = 0; n < count; n++) {
+                    const auto count = panels.get_count();
+                    for (size_t n = 0; n < count; n++) {
                         if (!n || uStringCompare(panels[n - 1].category, panels[n].category)) {
                             if (n)
-                                uAppendMenu(
-                                    menu_change_base, MF_STRING | MF_POPUP, (UINT)popup, panels[n - 1].category);
+                                uAppendMenu(menu_change_base, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(popup),
+                                    panels[n - 1].category);
                             popup = CreatePopupMenu();
                         }
                         uAppendMenu(popup, (MF_STRING), ID_CHANGE_BASE + n, panels[n].name);
                         ID_INSERT_BASE++;
                         if (n == count - 1)
-                            uAppendMenu(menu_change_base, MF_STRING | MF_POPUP, (UINT)popup, panels[n].category);
+                            uAppendMenu(menu_change_base, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(popup),
+                                panels[n].category);
                     }
-                    uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)menu_change_base, "Change base");
+                    uAppendMenu(
+                        menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(menu_change_base), "Change base");
                 }
                 unsigned ID_SWITCH_BASE = ID_INSERT_BASE + 1;
                 if (p_splitter.is_valid() && p_node->m_children.size() < p_splitter->get_maximum_panel_count()) {
                     HMENU menu_change_base = CreatePopupMenu();
                     HMENU popup = nullptr;
-                    unsigned count = panels.get_count();
-                    unsigned last = 0;
-                    for (unsigned n = 0; n < count; n++) {
+                    const auto count = panels.get_count();
+                    size_t last = 0;
+                    for (size_t n = 0; n < count; n++) {
                         if (!panels[n].prefer_multiple_instances || !m_node_root->have_item(panels[n].guid)) {
                             if (!popup || uStringCompare(panels[last].category, panels[n].category)) {
                                 if (popup)
-                                    uAppendMenu(
-                                        menu_change_base, MF_STRING | MF_POPUP, (UINT)popup, panels[last].category);
+                                    uAppendMenu(menu_change_base, MF_STRING | MF_POPUP,
+                                        reinterpret_cast<UINT_PTR>(popup), panels[last].category);
                                 popup = CreatePopupMenu();
                             }
                             uAppendMenu(popup, (MF_STRING), ID_INSERT_BASE + n, panels[n].name);
                             last = n;
                         }
                         if (n == count - 1)
-                            uAppendMenu(menu_change_base, MF_STRING | MF_POPUP, (UINT)popup, panels[n].category);
+                            uAppendMenu(menu_change_base, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(popup),
+                                panels[n].category);
                     }
-                    uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)menu_change_base, "Insert panel");
-                    ID_SWITCH_BASE += count;
+                    uAppendMenu(
+                        menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(menu_change_base), "Insert panel");
+                    ID_SWITCH_BASE += gsl::narrow<unsigned>(count);
                 }
                 if (p_splitter.is_valid()) {
-                    unsigned count_exts = panels.get_count();
+                    const auto count_exts = panels.get_count();
                     HMENU menu_insert = CreatePopupMenu();
-                    for (unsigned n = 0; n < count_exts; n++) {
+                    for (size_t n = 0; n < count_exts; n++) {
                         if (panels[n].type & uie::type_splitter) {
                             uAppendMenu(menu_insert, (MF_STRING), ID_SWITCH_BASE + n, panels[n].name);
                         }
                     }
-                    AppendMenu(menu, MF_STRING | MF_POPUP, (UINT)menu_insert, _T("Change splitter type"));
+                    AppendMenu(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(menu_insert),
+                        _T("Change splitter type"));
                 }
                 if (ti_parent) {
                     if (GetMenuItemCount(menu))

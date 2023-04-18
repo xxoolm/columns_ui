@@ -1,63 +1,88 @@
-#include "stdafx.h"
+#include "pch.h"
+
+#include "icons.h"
+#include "resource_utils.h"
+#include "svg.h"
 
 /** Creates toggle buttons from standard config objects */
-#define __DEFINE_MENU_BUTTON(_namespace, _guid_command, _guid_config)                                                 \
-    namespace _namespace {                                                                                            \
-    class MenuCommandButton : public uie::button {                                                                    \
-        virtual const GUID& get_item_guid() const { return _guid_command; }                                           \
-        virtual HBITMAP get_item_bitmap(unsigned command_state_index, COLORREF cr_btntext, uie::t_mask& p_mask_type,  \
-            COLORREF& cr_mask, HBITMAP& bm_mask) const                                                                \
-        {                                                                                                             \
-            return NULL;                                                                                              \
-        }                                                                                                             \
-        virtual unsigned get_button_state() const                                                                     \
-        {                                                                                                             \
-            return config_object::g_get_data_bool_simple(_guid_config, false)                                         \
-                ? uie::BUTTON_STATE_PRESSED | uie::BUTTON_STATE_ENABLED                                               \
-                : uie::BUTTON_STATE_DEFAULT;                                                                          \
-        }                                                                                                             \
-        virtual void register_callback(uie::button_callback& p_callback) { m_callbacks.add_item(&p_callback); };      \
-        virtual void deregister_callback(uie::button_callback& p_callback) { m_callbacks.remove_item(&p_callback); }; \
-        pfc::ptr_list_t<uie::button_callback> m_callbacks;                                                            \
-        static pfc::ptr_list_t<MenuCommandButton> m_buttons;                                                          \
-                                                                                                                      \
-    public:                                                                                                           \
-        static void g_on_state_change(bool b_enabled)                                                                 \
-        {                                                                                                             \
-            t_size i, ic = m_buttons.get_count(), j, jc;                                                              \
-            for (i = 0; i < ic; i++) {                                                                                \
-                jc = m_buttons[i]->m_callbacks.get_count();                                                           \
-                for (j = 0; j < jc; j++) {                                                                            \
-                    m_buttons[i]->m_callbacks[j]->on_button_state_change(b_enabled                                    \
-                            ? uie::BUTTON_STATE_PRESSED | uie::BUTTON_STATE_ENABLED                                   \
-                            : uie::BUTTON_STATE_DEFAULT);                                                             \
-                }                                                                                                     \
-            }                                                                                                         \
-        }                                                                                                             \
-        MenuCommandButton() { m_buttons.add_item(this); }                                                             \
-        ~MenuCommandButton() { m_buttons.remove_item(this); }                                                         \
-        MenuCommandButton(const MenuCommandButton&) = delete;                                                         \
-        MenuCommandButton& operator=(const MenuCommandButton&) = delete;                                              \
-        MenuCommandButton(MenuCommandButton&&) = delete;                                                              \
-        MenuCommandButton& operator=(MenuCommandButton&&) = delete;                                                   \
-    };                                                                                                                \
-    pfc::ptr_list_t<MenuCommandButton> MenuCommandButton::m_buttons;                                                  \
-    uie::button_factory<MenuCommandButton> g_menu_command_button;                                                     \
-    class MenuCommandConfigObjectNotify : public config_object_notify {                                               \
-    public:                                                                                                           \
-        virtual t_size get_watched_object_count() { return 1; }                                                       \
-        virtual GUID get_watched_object(t_size p_index) { return _guid_config; }                                      \
-        virtual void on_watched_object_changed(const service_ptr_t<config_object>& p_object)                          \
-        {                                                                                                             \
-            bool val = false;                                                                                         \
-            try {                                                                                                     \
-                p_object->get_data_bool(val);                                                                         \
-                MenuCommandButton::g_on_state_change(val);                                                            \
-            } catch (exception_io const&) {                                                                           \
-            };                                                                                                        \
-        }                                                                                                             \
-    };                                                                                                                \
-    service_factory_t<MenuCommandConfigObjectNotify> g_menu_command_config_object_notify;                             \
+#define __DEFINE_MENU_BUTTON(_namespace, _guid_command, _guid_config)                                                \
+    namespace _namespace {                                                                                           \
+    class MenuCommandButton : public uie::button {                                                                   \
+        virtual const GUID& get_item_guid() const                                                                    \
+        {                                                                                                            \
+            return _guid_command;                                                                                    \
+        }                                                                                                            \
+        virtual HBITMAP get_item_bitmap(unsigned command_state_index, COLORREF cr_btntext, uie::t_mask& p_mask_type, \
+            COLORREF& cr_mask, HBITMAP& bm_mask) const                                                               \
+        {                                                                                                            \
+            return NULL;                                                                                             \
+        }                                                                                                            \
+        virtual unsigned get_button_state() const                                                                    \
+        {                                                                                                            \
+            return config_object::g_get_data_bool_simple(_guid_config, false)                                        \
+                ? uie::BUTTON_STATE_PRESSED | uie::BUTTON_STATE_ENABLED                                              \
+                : uie::BUTTON_STATE_DEFAULT;                                                                         \
+        }                                                                                                            \
+        virtual void register_callback(uie::button_callback& p_callback)                                             \
+        {                                                                                                            \
+            m_callbacks.add_item(&p_callback);                                                                       \
+        };                                                                                                           \
+        virtual void deregister_callback(uie::button_callback& p_callback)                                           \
+        {                                                                                                            \
+            m_callbacks.remove_item(&p_callback);                                                                    \
+        };                                                                                                           \
+        pfc::ptr_list_t<uie::button_callback> m_callbacks;                                                           \
+        static pfc::ptr_list_t<MenuCommandButton> m_buttons;                                                         \
+                                                                                                                     \
+    public:                                                                                                          \
+        static void g_on_state_change(bool b_enabled)                                                                \
+        {                                                                                                            \
+            size_t i, ic = m_buttons.get_count(), j, jc;                                                             \
+            for (i = 0; i < ic; i++) {                                                                               \
+                jc = m_buttons[i]->m_callbacks.get_count();                                                          \
+                for (j = 0; j < jc; j++) {                                                                           \
+                    m_buttons[i]->m_callbacks[j]->on_button_state_change(b_enabled                                   \
+                            ? uie::BUTTON_STATE_PRESSED | uie::BUTTON_STATE_ENABLED                                  \
+                            : uie::BUTTON_STATE_DEFAULT);                                                            \
+                }                                                                                                    \
+            }                                                                                                        \
+        }                                                                                                            \
+        MenuCommandButton()                                                                                          \
+        {                                                                                                            \
+            m_buttons.add_item(this);                                                                                \
+        }                                                                                                            \
+        ~MenuCommandButton()                                                                                         \
+        {                                                                                                            \
+            m_buttons.remove_item(this);                                                                             \
+        }                                                                                                            \
+        MenuCommandButton(const MenuCommandButton&) = delete;                                                        \
+        MenuCommandButton& operator=(const MenuCommandButton&) = delete;                                             \
+        MenuCommandButton(MenuCommandButton&&) = delete;                                                             \
+        MenuCommandButton& operator=(MenuCommandButton&&) = delete;                                                  \
+    };                                                                                                               \
+    pfc::ptr_list_t<MenuCommandButton> MenuCommandButton::m_buttons;                                                 \
+    uie::button_factory<MenuCommandButton> g_menu_command_button;                                                    \
+    class MenuCommandConfigObjectNotify : public config_object_notify {                                              \
+    public:                                                                                                          \
+        virtual size_t get_watched_object_count()                                                                    \
+        {                                                                                                            \
+            return 1;                                                                                                \
+        }                                                                                                            \
+        virtual GUID get_watched_object(size_t p_index)                                                              \
+        {                                                                                                            \
+            return _guid_config;                                                                                     \
+        }                                                                                                            \
+        virtual void on_watched_object_changed(const service_ptr_t<config_object>& p_object)                         \
+        {                                                                                                            \
+            bool val = false;                                                                                        \
+            try {                                                                                                    \
+                p_object->get_data_bool(val);                                                                        \
+                MenuCommandButton::g_on_state_change(val);                                                           \
+            } catch (exception_io const&) {                                                                          \
+            };                                                                                                       \
+        }                                                                                                            \
+    };                                                                                                               \
+    service_factory_t<MenuCommandConfigObjectNotify> g_menu_command_config_object_notify;                            \
     }
 
 namespace cui::button_items {
@@ -71,34 +96,35 @@ __DEFINE_MENU_BUTTON(
 __DEFINE_MENU_BUTTON(d, standard_commands::guid_main_always_on_top, standard_config_objects::bool_ui_always_on_top)
 
 /**Defines icons for buttons */
-template <const GUID& MenutItemID, WORD LightIconID, WORD DarkIconID>
+template <const GUID& MenutItemID, icons::IconConfig icon_config>
 class ButtonMenuItemWithBitmap : public uie::button_v2 {
     const GUID& get_item_guid() const override { return MenutItemID; }
 
     HANDLE get_item_bitmap(unsigned command_state_index, COLORREF cr_btntext, unsigned cx_hint, unsigned cy_hint,
         unsigned& handle_type) const override
     {
-        const auto icon_id = colours::is_dark_mode_active() ? DarkIconID : LightIconID;
-        auto icon = (HICON)LoadImage(
-            core_api::get_my_instance(), MAKEINTRESOURCE(icon_id), IMAGE_ICON, cx_hint, cy_hint, NULL);
+        const auto cx = gsl::narrow<int>(cx_hint);
+        const auto cy = gsl::narrow<int>(cy_hint);
+
+        if (icons::use_svg_icon(cx, cy)) {
+            handle_type = handle_type_bitmap;
+            return render_svg(icon_config, cx, cy).release();
+        }
+
         handle_type = handle_type_icon;
-        return (HANDLE)icon;
+        return load_icon(icon_config, cx, cy).release();
     }
 };
 
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_stop, IDI_LIGHT_STOP, IDI_DARK_STOP>>
-    g_button_stop;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_open, IDI_LIGHT_OPEN, IDI_DARK_OPEN>>
-    g_button_open;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_play, IDI_LIGHT_PLAY, IDI_DARK_PLAY>>
-    g_button_play;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_pause, IDI_LIGHT_PAUSE, IDI_DARK_PAUSE>>
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_stop, icons::built_in::stop>> g_button_stop;
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_open, icons::built_in::open>> g_button_open;
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_play, icons::built_in::play>> g_button_play;
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_pause, icons::built_in::pause>>
     g_button_pause;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_next, IDI_LIGHT_NEXT, IDI_DARK_NEXT>>
-    g_button_next;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_previous, IDI_LIGHT_PREV, IDI_DARK_PREV>>
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_next, icons::built_in::next>> g_button_next;
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_previous, icons::built_in::previous>>
     g_button_previous;
-uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_random, IDI_LIGHT_RAND, IDI_DARK_RAND>>
+uie::button_factory<ButtonMenuItemWithBitmap<standard_commands::guid_main_random, icons::built_in::random>>
     g_button_random;
 
 class ButtonBlank : public ui_extension::custom_button {
@@ -169,13 +195,13 @@ class button_stop : public ui_extension::button//, play_callback
     virtual void register_callback(uie::button_callback & p_callback)
     {
         m_callback = &p_callback;
-        static_api_ptr_t<play_callback_manager>()->register_callback(this, play_callback::flag_on_playback_all, false);
+        play_callback_manager::get()->register_callback(this, play_callback::flag_on_playback_all, false);
     };
     virtual void deregister_callback(uie::button_callback & p_callback)
     {
         assert(m_callback == &p_callback);
         m_callback = NULL;
-        static_api_ptr_t<play_callback_manager>()->unregister_callback(this);
+        play_callback_manager::get()->unregister_callback(this);
     };
     virtual void FB2KAPI on_playback_starting(play_control::t_track_command p_command, bool p_paused){};
     virtual void FB2KAPI on_playback_new_track(metadb_handle_ptr p_track)
@@ -259,7 +285,7 @@ class button_next : public ui_extension::button
                 m_playlist_api->playlist_set_playback_cursor(m_playlist, m_index);
                 m_play_api->play_start(play_control::TRACK_COMMAND_SETTRACK);
             }
-            menu_node_play_item(unsigned pl, unsigned p_index)
+            menu_node_play_item(unsigned pl, size_t p_index)
                 : m_playlist(pl), m_index(p_index)
             {
                 playlist_manager::g_get(m_playlist_api);
@@ -267,7 +293,7 @@ class button_next : public ui_extension::button
             };
         };
         unsigned cursor, playlist;
-        static_api_ptr_t<playlist_manager> api;
+        const auto api = playlist_manager::get();
         if (!api->get_playing_item_location(&playlist, &cursor))
         {
             playlist = api->get_active_playlist();

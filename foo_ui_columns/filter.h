@@ -10,14 +10,14 @@ public:
 
     const GUID& get_client_guid() const override { return g_guid; }
     void get_name(pfc::string_base& p_out) const override { p_out = "Filter panel"; }
-    t_size get_supported_colours() const override { return colours::colour_flag_all; }
-    t_size get_supported_bools() const override
+    uint32_t get_supported_colours() const override { return colours::colour_flag_all; }
+    uint32_t get_supported_bools() const override
     {
         return colours::bool_flag_use_custom_active_item_frame | colours::bool_flag_dark_mode_enabled;
     }
     bool get_themes_supported() const override { return true; }
-    void on_colour_changed(t_size mask) const override;
-    void on_bool_changed(t_size mask) const override;
+    void on_colour_changed(uint32_t mask) const override;
+    void on_bool_changed(uint32_t mask) const override;
 };
 
 class Field {
@@ -29,6 +29,8 @@ public:
 
 class Node {
 public:
+    using Ptr = std::shared_ptr<Node>;
+
     metadb_handle_list_t<pfc::alloc_fast_aggressive> m_handles;
     std::wstring m_value;
     bool m_handles_sorted{false};
@@ -36,8 +38,8 @@ public:
     void ensure_handles_sorted();
     void remove_handles(metadb_handle_list_cref to_remove);
 
-    static int g_compare(const Node& i1, const WCHAR* i2);
-    static int g_compare_ptr_with_node(const Node& i1, const Node& i2);
+    static int g_compare(const Node::Ptr& i1, const WCHAR* i2);
+    static int g_compare_ptr_with_node(const Node::Ptr& i1, const Node::Ptr& i2);
 };
 
 class FieldData {
@@ -98,10 +100,10 @@ public:
         action_add_to_active,
     };
 
-    static t_size g_get_stream_index_by_window(const uie::window_ptr& ptr);
+    static size_t g_get_stream_index_by_window(const uie::window_ptr& ptr);
     static void g_on_orderedbysplitters_change();
     static void g_on_fields_change();
-    static t_size g_get_field_index_by_name(const char* p_name);
+    static size_t g_get_field_index_by_name(const char* p_name);
     static void g_on_field_title_change(const char* p_old, const char* p_new);
     static void g_on_vertical_item_padding_change();
     static void g_on_show_column_titles_change();
@@ -115,8 +117,8 @@ public:
     static void g_on_font_header_change();
     static void g_redraw_all();
     static void g_on_new_field(const Field& field);
-    static void g_on_fields_swapped(t_size index_1, t_size index_2);
-    static void g_on_field_removed(t_size index);
+    static void g_on_fields_swapped(size_t index_1, size_t index_2);
+    static void g_on_field_removed(size_t index);
 
     ~FilterPanel() = default;
 
@@ -130,7 +132,7 @@ public:
     void get_name(pfc::string_base& out) const override;
     void get_category(pfc::string_base& out) const override;
     unsigned get_type() const override;
-    void set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort) override;
+    void set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort) override;
     void get_config(stream_writer* p_writer, abort_callback& p_abort) const override;
 
     FilterStream::ptr m_stream;
@@ -145,10 +147,10 @@ private:
 
     static void g_create_field_data(const Field& field, FieldData& p_out);
     static void g_load_fields();
-    static void g_update_subsequent_filters(const pfc::list_base_const_t<FilterPanel*>& windows, t_size index,
+    static void g_update_subsequent_filters(const pfc::list_base_const_t<FilterPanel*>& windows, size_t index,
         bool b_check_needs_update = false, bool b_update_playlist = true);
 
-    t_size get_field_index();
+    size_t get_field_index();
     void set_field(const FieldData& field, bool b_force = false);
     void get_windows(pfc::list_base_t<FilterPanel*>& windows);
     FilterPanel* get_next_window();
@@ -156,7 +158,15 @@ private:
     void get_initial_handles(metadb_handle_list_t<pfc::alloc_fast_aggressive>& p_out);
     void update_subsequent_filters(bool b_allow_autosend = true);
     size_t make_data_entries(const metadb_handle_list_t<pfc::alloc_fast_aggressive>& handles,
-        pfc::list_t<DataEntry, pfc::alloc_fast_aggressive>& p_out, bool b_show_empty);
+        std::vector<DataEntry>& p_out, bool b_show_empty) const;
+    [[nodiscard]] std::vector<DataEntry> make_data_entries_using_script_fb2k_v2(
+        const metadb_handle_list_t<pfc::alloc_fast_aggressive>& handles, bool b_show_empty) const;
+    [[nodiscard]] std::vector<DataEntry> make_data_entries_using_script_fb2k_v1(
+        const metadb_handle_list_t<pfc::alloc_fast_aggressive>& handles, bool b_show_empty) const;
+    [[nodiscard]] std::vector<DataEntry> make_data_entries_using_metadata_fb2k_v2(
+        const metadb_handle_list_t<pfc::alloc_fast_aggressive>& handles, bool b_show_empty) const;
+    [[nodiscard]] std::vector<DataEntry> make_data_entries_using_metadata_fb2k_v1(
+        const metadb_handle_list_t<pfc::alloc_fast_aggressive>& handles, bool b_show_empty) const;
     void populate_list(const metadb_handle_list_t<pfc::alloc_fast>& handles);
     void populate_list_from_chain(const metadb_handle_list_t<pfc::alloc_fast>& handles, bool b_last_in_chain);
     void refresh(bool b_allow_autosend = true);
@@ -180,17 +190,17 @@ private:
     void on_items_removed(const pfc::list_base_const_t<metadb_handle_ptr>& p_data) override;
     void on_items_modified(const pfc::list_base_const_t<metadb_handle_ptr>& p_data) override;
 
-    void execute_default_action(t_size index, t_size column, bool b_keyboard, bool b_ctrl) override;
-    t_size get_highlight_item() override;
+    void execute_default_action(size_t index, size_t column, bool b_keyboard, bool b_ctrl) override;
+    size_t get_highlight_item() override;
     void move_selection(int delta) override {}
-    void notify_update_item_data(t_size index) override;
-    bool notify_on_middleclick(bool on_item, t_size index) override;
+    void notify_update_item_data(size_t index) override;
+    bool notify_on_middleclick(bool on_item, size_t index) override;
     void notify_on_selection_change(
         const bit_array& p_affected, const bit_array& p_status, notification_source_t p_notification_source) override;
     bool notify_before_create_inline_edit(
-        const pfc::list_base_const_t<t_size>& indices, unsigned column, bool b_source_mouse) override;
-    bool notify_create_inline_edit(const pfc::list_base_const_t<t_size>& indices, unsigned column,
-        pfc::string_base& p_text, t_size& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries) override;
+        const pfc::list_base_const_t<size_t>& indices, size_t column, bool b_source_mouse) override;
+    bool notify_create_inline_edit(const pfc::list_base_const_t<size_t>& indices, size_t column,
+        pfc::string_base& p_text, size_t& p_flags, mmh::ComPtr<IUnknown>& pAutocompleteEntries) override;
     void notify_save_inline_edit(const char* value) override;
     void notify_exit_inline_edit() override;
     void notify_on_set_focus(HWND wnd_lost) override;
@@ -202,25 +212,25 @@ private:
     bool notify_on_contextmenu_header(const POINT& pt, const HDHITTESTINFO& ht) override;
     void notify_on_menu_select(WPARAM wp, LPARAM lp) override;
     bool notify_on_contextmenu(const POINT& pt, bool from_keyboard) override;
-    void notify_sort_column(t_size index, bool b_descending, bool b_selection_only) override;
+    void notify_sort_column(size_t index, bool b_descending, bool b_selection_only) override;
     bool notify_on_keyboard_keydown_filter(UINT msg, WPARAM wp, LPARAM lp) override;
     bool do_drag_drop(WPARAM wp) override;
 
-    t_size get_drag_item_count() override { return m_drag_item_count; }
+    size_t get_drag_item_count() override { return m_drag_item_count; }
 
     static bool g_showemptyitems;
     static bool g_showallnode;
 
     ui_selection_holder::ptr m_selection_holder;
-    t_size m_drag_item_count{0};
+    size_t m_drag_item_count{0};
     pfc::string8 m_edit_previous_value;
     std::vector<pfc::string8> m_edit_fields;
     metadb_handle_list m_edit_handles;
-    pfc::list_t<Node> m_nodes;
+    pfc::list_t<Node::Ptr> m_nodes;
     bool m_show_search{false};
     bool m_pending_sort_direction{false};
     contextmenu_manager::ptr m_contextmenu_manager;
-    UINT_PTR m_contextmenu_manager_base{0};
+    UINT m_contextmenu_manager_base{0};
     ui_status_text_override::ptr m_status_text_override;
 };
 

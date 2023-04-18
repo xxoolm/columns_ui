@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "rebar.h"
 
 #include "dark_mode.h"
@@ -48,35 +48,34 @@ void create_rebar()
 }
 
 void ConfigRebar::export_config(
-    stream_writer* p_out, t_uint32 mode, fcl::t_export_feedback& feedback, abort_callback& p_abort)
+    stream_writer* p_out, uint32_t mode, fcl::t_export_feedback& feedback, abort_callback& p_abort)
 {
     enum { stream_version = 0 };
-    p_out->write_lendian_t((t_uint32)stream_version, p_abort);
+    p_out->write_lendian_t((uint32_t)stream_version, p_abort);
 
     if (g_rebar_window) {
         g_rebar_window->refresh_band_configs();
         set_rebar_info(g_rebar_window->get_band_states());
     }
 
-    t_size count = m_entries.size();
-    p_out->write_lendian_t(count, p_abort);
-    for (t_size i = 0; i < count; i++) {
+    size_t count = m_entries.size();
+    p_out->write_lendian_t(gsl::narrow<uint32_t>(count), p_abort);
+    for (size_t i = 0; i < count; i++) {
         feedback.add_required_panel(m_entries[i].m_guid);
         m_entries[i].export_to_fcl_stream(p_out, mode, p_abort);
     }
 }
 
 void ConfigRebar::import_config(
-    stream_reader* p_reader, t_size size, t_uint32 mode, pfc::list_base_t<GUID>& panels, abort_callback& p_abort)
+    stream_reader* p_reader, size_t size, uint32_t mode, pfc::list_base_t<GUID>& panels, abort_callback& p_abort)
 {
-    t_uint32 version;
+    uint32_t version;
     std::vector<RebarBandState> new_entries;
     p_reader->read_lendian_t(version, p_abort);
     if (version > 0)
         throw exception_io_unsupported_format();
-    t_size count;
-    p_reader->read_lendian_t(count, p_abort);
-    for (t_size i = 0; i < count; i++) {
+    const auto count = p_reader->read_lendian_t<uint32_t>(p_abort);
+    for (size_t i = 0; i < count; i++) {
         RebarBandState item;
         item.import_from_fcl_stream(p_reader, mode, p_abort);
 
@@ -103,8 +102,8 @@ void ConfigRebar::import_config(
 
 void BandCache::add_entry(const GUID& guid, unsigned width)
 {
-    unsigned count = get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = get_count();
+    for (size_t n = 0; n < count; n++) {
         BandCacheEntry& p_bce = (*this)[n];
         if (p_bce.guid == guid) {
             p_bce.width = width;
@@ -117,8 +116,8 @@ void BandCache::add_entry(const GUID& guid, unsigned width)
 unsigned BandCache::get_width(const GUID& guid)
 {
     unsigned rv = 100;
-    unsigned count = get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = get_count();
+    for (size_t n = 0; n < count; n++) {
         const auto& p_bce = get_item_ref(n);
         if (p_bce.guid == guid) {
             rv = p_bce.width;
@@ -129,9 +128,9 @@ unsigned BandCache::get_width(const GUID& guid)
 
 void BandCache::write(stream_writer* out, abort_callback& p_abort)
 {
-    unsigned count = get_count();
-    out->write_lendian_t(count, p_abort);
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = get_count();
+    out->write_lendian_t(gsl::narrow<uint32_t>(count), p_abort);
+    for (size_t n = 0; n < count; n++) {
         const auto& p_bce = get_item_ref(n);
         out->write_lendian_t(p_bce.guid, p_abort);
         out->write_lendian_t(p_bce.width, p_abort);
@@ -162,7 +161,7 @@ void ConfigBandCache::get_data_raw(stream_writer* out, abort_callback& p_abort)
     return entries.write(out, p_abort);
 }
 
-void ConfigBandCache::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort)
+void ConfigBandCache::set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort)
 {
     return entries.read(p_reader, p_abort);
 }
@@ -200,7 +199,7 @@ void ConfigRebar::get_data_raw(stream_writer* out, abort_callback& p_abort)
     // Extra data added in version 0.5.0
     out->write_lendian_t(static_cast<uint32_t>(StreamVersion::VersionCurrent), p_abort);
 
-    for (t_size n = 0; n < num; n++) {
+    for (size_t n = 0; n < num; n++) {
         stream_writer_memblock extraData;
         m_entries[n].write_extra(&extraData, p_abort);
         out->write_lendian_t(gsl::narrow<uint32_t>(extraData.m_data.get_size()), p_abort);
@@ -208,7 +207,7 @@ void ConfigRebar::get_data_raw(stream_writer* out, abort_callback& p_abort)
     }
 }
 
-void ConfigRebar::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort)
+void ConfigRebar::set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort)
 {
     m_entries.clear();
 
@@ -234,7 +233,7 @@ void ConfigRebar::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abo
         for (uint32_t i = 0; i < itemCount; i++) {
             uint32_t extraDataSize;
             p_reader->read_lendian_t(extraDataSize, p_abort);
-            pfc::array_staticsize_t<t_uint8> columnExtraData(extraDataSize);
+            pfc::array_staticsize_t<uint8_t> columnExtraData(extraDataSize);
             p_reader->read(columnExtraData.get_ptr(), columnExtraData.get_size(), p_abort);
             stream_reader_memblock_ref columnReader(columnExtraData);
             m_entries[i].read_extra(&columnReader, p_abort);
@@ -315,7 +314,7 @@ public:
 
     bool override_status_text_create(service_ptr_t<ui_status_text_override>& p_out) override
     {
-        static_api_ptr_t<ui_control> api;
+        const auto api = ui_control::get();
         return api->override_status_text_create(p_out);
     }
 
@@ -336,26 +335,30 @@ ui_extension::window_host_factory_single<RebarWindowHost> g_ui_ext_host_rebar;
 
 HWND RebarWindow::init()
 {
-    HWND rv = nullptr;
-
     auto& band_states = g_cfg_rebar.get_rebar_info();
 
     m_bands = band_states | ranges::views::transform([](auto&& band_state) { return RebarBand{band_state}; })
         | ranges::to<std::vector>();
 
     if (!wnd_rebar) {
-        rv = wnd_rebar = CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_CONTROLPARENT, REBARCLASSNAME, nullptr,
+        wnd_rebar = CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_CONTROLPARENT, REBARCLASSNAME, nullptr,
             WS_BORDER | WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | RBS_VARHEIGHT | RBS_DBLCLKTOGGLE | RBS_AUTOSIZE
                 | RBS_BANDBORDERS | CCS_NODIVIDER | CCS_NOPARENTALIGN | 0,
-            0, 0, 0, 0, main_window.get_wnd(), (HMENU)ID_REBAR, core_api::get_my_instance(), nullptr);
+            0, 0, 0, 0, main_window.get_wnd(), reinterpret_cast<HMENU>(ID_REBAR), core_api::get_my_instance(), nullptr);
 
-        reopen_themes();
-        m_dark_mode_notifier = std::make_unique<cui::colours::dark_mode_notifier>([this] { on_themechanged(); });
+        if (!wnd_rebar)
+            return nullptr;
+
+        SetWindowLongPtr(wnd_rebar, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        m_rebar_wnd_proc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtr(wnd_rebar, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(s_handle_hooked_message)));
+
+        m_dark_mode_notifier = std::make_unique<colours::dark_mode_notifier>([this] { on_themechanged(); });
     }
 
     refresh_bands();
 
-    return rv;
+    return wnd_rebar;
 }
 
 void RebarWindow::refresh_band_configs()
@@ -465,7 +468,6 @@ bool RebarWindow::set_menu_focus()
 
 void RebarWindow::on_themechanged()
 {
-    reopen_themes();
     SetWindowPos(wnd_rebar, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOZORDER | SWP_NOSIZE | SWP_FRAMECHANGED);
     RedrawWindow(wnd_rebar, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
 }
@@ -474,20 +476,16 @@ std::optional<LRESULT> RebarWindow::handle_custom_draw(const LPNMCUSTOMDRAW lpnm
 {
     switch (lpnmcd->dwDrawStage) {
     case CDDS_PREERASE: {
-        if (!(colours::is_dark_mode_active() && m_toolbar_theme))
+        if (!colours::is_dark_mode_active())
             return {};
 
-        COLORREF cr{RGB(255, 0, 0)};
-        if (FAILED(GetThemeColor(m_toolbar_theme.get(), 0, 0, TMT_FILLCOLOR, &cr)))
-            return {};
-
-        wil::unique_hbrush brush(CreateSolidBrush(cr));
+        const auto brush = get_colour_brush(dark::ColourID::RebarBackground, true);
 
         RECT rc{};
         GetClientRect(lpnmcd->hdr.hwndFrom, &rc);
         FillRect(lpnmcd->hdc, &rc, brush.get());
 
-        const int row_count = SendMessage(lpnmcd->hdr.hwndFrom, RB_GETROWCOUNT, 0, 0);
+        const int row_count = gsl::narrow<int>(SendMessage(lpnmcd->hdr.hwndFrom, RB_GETROWCOUNT, 0, 0));
 
         const auto divider_brush = get_colour_brush_lazy(dark::ColourID::RebarBandBorder, true);
         const auto divider_width = uih::scale_dpi_value(1, USER_DEFAULT_SCREEN_DPI * 2);
@@ -497,7 +495,8 @@ std::optional<LRESULT> RebarWindow::handle_custom_draw(const LPNMCUSTOMDRAW lpnm
 
         for (auto&& [band_index, band] : ranges::views::enumerate(m_bands)) {
             if (band_index == 0 || band.m_state.m_break_before_band) {
-                const int row_height = SendMessage(lpnmcd->hdr.hwndFrom, RB_GETROWHEIGHT, band_index, 0);
+                const int row_height
+                    = gsl::narrow<int>(SendMessage(lpnmcd->hdr.hwndFrom, RB_GETROWHEIGHT, band_index, 0));
                 row_bottom += row_height;
 
                 ++row_index;
@@ -536,13 +535,13 @@ void RebarWindow::save_bands()
     const auto band_count = m_bands.size();
     mmh::Permutation order(band_count);
 
-    UINT count = SendMessage(wnd_rebar, RB_GETBANDCOUNT, 0, 0);
+    const auto count = static_cast<UINT>(SendMessage(wnd_rebar, RB_GETBANDCOUNT, 0, 0));
 
     bool b_death = false;
 
     if (count && band_count == count) {
         for (uint32_t n = 0; n < count; n++) {
-            BOOL b_OK = SendMessage(wnd_rebar, RB_GETBANDINFO, n, reinterpret_cast<LPARAM>(&rbbi));
+            const auto b_OK = SendMessage(wnd_rebar, RB_GETBANDINFO, n, reinterpret_cast<LPARAM>(&rbbi));
             const auto band_index = static_cast<uint32_t>(rbbi.lParam);
             if (b_OK && band_index < count) {
                 order[n] = band_index;
@@ -564,7 +563,7 @@ bool RebarWindow::check_band(const GUID& id)
         != m_bands.end();
 }
 
-bool RebarWindow::find_band(const GUID& id, unsigned& out)
+bool RebarWindow::find_band(const GUID& id, size_t& out)
 {
     const auto iterator
         = std::find_if(m_bands.begin(), m_bands.end(), [&id](auto&& band) { return band.m_state.m_guid == id; });
@@ -575,7 +574,7 @@ bool RebarWindow::find_band(const GUID& id, unsigned& out)
 
 bool RebarWindow::delete_band(const GUID& id)
 {
-    unsigned n = 0;
+    size_t n = 0;
     bool rv = find_band(id, n);
     if (rv)
         delete_band(n);
@@ -586,7 +585,7 @@ void RebarWindow::destroy_bands()
 {
     abort_callback_dummy abortCallbackDummy;
 
-    UINT count = SendMessage(wnd_rebar, RB_GETBANDCOUNT, 0, 0);
+    const auto count = static_cast<UINT>(SendMessage(wnd_rebar, RB_GETBANDCOUNT, 0, 0));
 
     if (count > 0 && count == m_bands.size()) {
         for (auto&& band : m_bands) {
@@ -613,7 +612,6 @@ void RebarWindow::destroy()
     destroy_bands();
     DestroyWindow(wnd_rebar);
     wnd_rebar = nullptr;
-    m_toolbar_theme.reset();
 }
 
 void RebarWindow::update_bands()
@@ -622,7 +620,7 @@ void RebarWindow::update_bands()
     uih::rebar_show_all_bands(wnd_rebar);
 }
 
-void RebarWindow::delete_band(unsigned n)
+void RebarWindow::delete_band(size_t n)
 {
     if (n < m_bands.size()) {
         SendMessage(wnd_rebar, RB_SHOWBAND, n, FALSE);
@@ -672,7 +670,7 @@ void RebarWindow::insert_band(unsigned idx, const GUID& guid, unsigned width, co
     refresh_bands(false);
 }
 
-void RebarWindow::update_band(unsigned n, bool size)
+void RebarWindow::update_band(size_t n, bool size)
 {
     ui_extension::window_ptr p_ext = m_bands[n].m_window;
     if (p_ext.is_valid()) {
@@ -703,7 +701,7 @@ void RebarWindow::update_band(unsigned n, bool size)
             rbbi.cx = m_bands[n].m_state.m_width;
         }
 
-        uRebar_InsertItem(wnd_rebar, n, &rbbi, false);
+        uRebar_InsertItem(wnd_rebar, gsl::narrow<int>(n), &rbbi, false);
         SendMessage(wnd_rebar, RB_SHOWBAND, n, TRUE);
 
         fix_z_order();
@@ -793,22 +791,38 @@ void RebarWindow::refresh_bands(bool force_destroy_bands)
     fix_z_order();
 }
 
+LRESULT RebarWindow::s_handle_hooked_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    const auto self = reinterpret_cast<RebarWindow*>(GetWindowLongPtr(wnd, GWLP_USERDATA));
+    return self ? self->handle_hooked_message(wnd, msg, wp, lp) : DefWindowProc(wnd, msg, wp, lp);
+}
+
+LRESULT RebarWindow::handle_hooked_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_ERASEBKGND: {
+        const auto dc = reinterpret_cast<HDC>(wp);
+        if (WindowFromDC(dc) != wnd)
+            return CallWindowProc(m_rebar_wnd_proc, wnd, WM_ERASEBKGND, wp, lp);
+
+        return FALSE;
+    }
+    case WM_PAINT: {
+        uih::paint_subclassed_window_with_buffering(wnd, m_rebar_wnd_proc);
+        return 0;
+    }
+    }
+    return CallWindowProc(m_rebar_wnd_proc, wnd, msg, wp, lp);
+}
+
 void RebarWindow::fix_z_order()
 {
-    const auto dwp = BeginDeferWindowPos(m_bands.size());
+    const auto dwp = BeginDeferWindowPos(gsl::narrow<int>(m_bands.size()));
     for (auto&& band : m_bands) {
         if (band.m_wnd)
             DeferWindowPos(dwp, band.m_wnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     }
     EndDeferWindowPos(dwp);
-}
-
-void RebarWindow::reopen_themes()
-{
-    if (cui::colours::is_dark_mode_active())
-        m_toolbar_theme.reset(OpenThemeData(wnd_rebar, L"DarkMode::Toolbar"));
-    else
-        m_toolbar_theme.reset();
 }
 
 ui_extension::window_host& get_rebar_host()

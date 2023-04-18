@@ -1,8 +1,10 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "ng_playlist/ng_playlist.h"
 #include "config.h"
 #include "help.h"
 #include "prefs_utils.h"
+
+extern const char* default_global_style_script;
 
 static cfg_int g_cur_tab2(GUID{0x5fb6e011, 0x1ead, 0x49fe, {0x45, 0x32, 0x1c, 0x8a, 0x61, 0x01, 0x91, 0x2b}}, 0);
 
@@ -20,9 +22,9 @@ public:
         int id = g_cur_tab2;
         if (id >= 0 && id < 2) {
             if (id == 0)
-                cfg_globalstring = string_utf8_from_window(wnd, IDC_STRING);
+                cfg_globalstring = uGetDlgItemText(wnd, IDC_STRING);
             else if (id == 1)
-                cfg_colour = string_utf8_from_window(wnd, IDC_STRING);
+                cfg_colour = uGetDlgItemText(wnd, IDC_STRING);
         }
     }
 
@@ -79,7 +81,7 @@ public:
         case WM_COMMAND:
             switch (wp) {
             case IDC_GLOBAL:
-                cfg_global = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_global = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
             case IDC_TFHELP: {
                 RECT rc;
@@ -120,7 +122,7 @@ public:
                 } else if (cmd == IDM_SPEEDTEST) {
                     speedtest(g_columns, cfg_global != 0);
                 } else if (cmd == IDM_PREVIEW) {
-                    preview_to_console(string_utf8_from_window(wnd, IDC_STRING), g_cur_tab2 != 0 && cfg_global);
+                    preview_to_console(uGetDlgItemText(wnd, IDC_STRING), g_cur_tab2 != 0 && cfg_global);
                 } else if (cmd == IDM_EDITORFONT) {
                     auto font_description = cui::fonts::select_font(GetParent(wnd), cfg_editor_font->log_font);
                     if (font_description) {
@@ -128,8 +130,7 @@ public:
                         g_editor_font_notify.on_change();
                     }
                 } else if (cmd == IDM_RESETSTYLE) {
-                    extern const char* g_default_colour;
-                    cfg_colour = g_default_colour;
+                    cfg_colour = default_global_style_script;
                     if (g_cur_tab2 == 1)
                         uSendDlgItemMessageText(wnd, IDC_STRING, WM_SETTEXT, 0, cfg_colour);
                     cui::panels::playlist_view::PlaylistView::g_update_all_items();
@@ -138,7 +139,7 @@ public:
 
             break;
             case IDC_GLOBALSORT:
-                cfg_global_sort = SendMessage((HWND)lp, BM_GETCHECK, 0, 0);
+                cfg_global_sort = Button_GetCheck(reinterpret_cast<HWND>(lp)) == BST_CHECKED;
                 break;
             case IDC_APPLY:
                 save_string(wnd);

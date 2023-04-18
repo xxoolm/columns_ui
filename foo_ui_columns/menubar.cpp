@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "menu_mnemonics.h"
 
@@ -18,11 +18,11 @@ public:
     pfc::string8 m_name;
     pfc::array_t<TCHAR> m_name_with_accelerators;
     GUID m_guid{};
-    t_uint32 m_sort_priority{NULL};
+    uint32_t m_sort_priority{NULL};
 
     MainMenuRootGroup() = default;
 
-    static t_size g_compare(const MainMenuRootGroup& p_item1, const MainMenuRootGroup& p_item2)
+    static auto g_compare(const MainMenuRootGroup& p_item1, const MainMenuRootGroup& p_item2)
     {
         return pfc::compare_t(p_item1.m_sort_priority, p_item2.m_sort_priority);
     }
@@ -58,7 +58,7 @@ public:
 };
 
 class MenuToolbar
-    : public ui_extension::container_uie_window_t<uie::menu_window_v2>
+    : public uie::container_uie_window_v3_t<uie::menu_window_v2>
     , uih::MessageHook {
 public:
     //    static pfc::ptr_list_t<playlists_list_window> list_wnd;
@@ -74,7 +74,12 @@ public:
     service_ptr_t<mainmenu_manager> p_manager;
     service_ptr_t<ui_status_text_override> m_status_override;
 
-    class_data& get_class_data() const override { __implement_get_class_data_child_ex(class_name, true, false); }
+    uie::container_window_v3_config get_window_config() override
+    {
+        uie::container_window_v3_config config(class_name);
+        config.invalidate_children_on_move_or_resize = true;
+        return config;
+    }
 
     HWND wnd_menu{nullptr};
     HWND wnd_prev_focus{nullptr};
@@ -86,7 +91,7 @@ public:
 
     bool on_hooked_message(uih::MessageHookType p_type, int code, WPARAM wp, LPARAM lp) override;
 
-    void make_menu(unsigned idx);
+    void make_menu(int idx);
 
     void destroy_menu() const { SendMessage(get_wnd(), WM_CANCELMODE, 0, 0); }
 
@@ -113,7 +118,6 @@ public:
     HWND get_previous_focus_window() const override;
 
     MenuToolbar();
-    ~MenuToolbar();
 
 private:
     void set_window_theme();
@@ -129,8 +133,6 @@ private:
 bool MenuToolbar::hooked = false;
 
 MenuToolbar::MenuToolbar() : p_manager(nullptr) {}
-
-MenuToolbar::~MenuToolbar() = default;
 
 const TCHAR* MenuToolbar::class_name = _T("{76E6DB50-0DE3-4f30-A7E4-93FD628B1401}");
 
@@ -162,11 +164,9 @@ LRESULT MenuToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         initialised = true;
 
         MainMenuRootGroup::g_get_root_items(m_buttons);
-        t_size button_count = m_buttons.get_count();
+        size_t button_count = m_buttons.get_count();
 
-        pfc::array_t<TBBUTTON> tbb;
-        tbb.set_size(button_count);
-        memset(tbb.get_ptr(), 0, tbb.get_size() * sizeof(TBBUTTON));
+        std::vector<TBBUTTON> tb_buttons(button_count);
 
         wnd_menu = CreateWindowEx(/*TBSTYLE_EX_MIXEDBUTTONS|*/ WS_EX_TOOLWINDOW, TOOLBARCLASSNAME, nullptr,
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | TBSTYLE_FLAT | TBSTYLE_TRANSPARENT
@@ -185,17 +185,16 @@ LRESULT MenuToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
             SendMessage(wnd_menu, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
 
-            unsigned count = tbb.get_size();
-            for (unsigned n = 0; n < count; n++) {
-                tbb[n].iBitmap = I_IMAGECALLBACK;
-                tbb[n].idCommand = n + 1;
-                tbb[n].fsState = TBSTATE_ENABLED;
-                tbb[n].fsStyle = BTNS_DROPDOWN | BTNS_AUTOSIZE;
-                tbb[n].dwData = 0;
-                tbb[n].iString = (int)m_buttons[n].m_name_with_accelerators.get_ptr();
+            for (auto&& [n, tb_button] : ranges::views::enumerate(tb_buttons)) {
+                tb_button.iBitmap = I_IMAGECALLBACK;
+                tb_button.idCommand = gsl::narrow<int>(n + 1);
+                tb_button.fsState = TBSTATE_ENABLED;
+                tb_button.fsStyle = BTNS_DROPDOWN | BTNS_AUTOSIZE;
+                tb_button.dwData = 0;
+                tb_button.iString = reinterpret_cast<INT_PTR>(m_buttons[n].m_name_with_accelerators.get_ptr());
             }
 
-            SendMessage(wnd_menu, TB_ADDBUTTONS, (WPARAM)tbb.get_size(), (LPARAM)(LPTBBUTTON)tbb.get_ptr());
+            SendMessage(wnd_menu, TB_ADDBUTTONS, (WPARAM)tb_buttons.size(), (LPARAM)(LPTBBUTTON)tb_buttons.data());
 
             //            SendMessage(wnd_menu, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS);
 
@@ -218,7 +217,7 @@ LRESULT MenuToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             // SendMessage(wnd_menu, TB_GETMAXSIZE, NULL, (LPARAM)&sz);
 
             RECT rc = {0, 0, 0, 0};
-            t_size count = m_buttons.get_count();
+            size_t count = m_buttons.get_count();
             int cx = lpwp->cx;
             int cy = lpwp->cy;
             int extra = 0;
@@ -268,9 +267,9 @@ LRESULT MenuToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     case MSG_CREATE_MENU: {
         if (lp)
             SetFocus(wnd_menu);
-        active_item = wp;
+        active_item = gsl::narrow_cast<int>(wp);
 
-        make_menu(wp);
+        make_menu(active_item);
         break;
     }
     case WM_MENUSELECT: {
@@ -403,12 +402,12 @@ LRESULT WINAPI MenuToolbar::hook(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         }
     } break;
     }
-    return uCallWindowProc(menuproc, wnd, msg, wp, lp);
+    return CallWindowProc(menuproc, wnd, msg, wp, lp);
 }
 
-void MenuToolbar::make_menu(unsigned idx)
+void MenuToolbar::make_menu(int idx)
 {
-    if (idx == actual_active || hooked || idx < 1 || idx > m_buttons.get_count())
+    if (idx == actual_active || hooked || idx < 1 || idx > gsl::narrow<int>(m_buttons.get_count()))
         return;
 
     service_ptr_t<MenuToolbar> dummy = this; // menu command may delete us
@@ -531,7 +530,7 @@ bool MenuToolbar::on_hooked_message(uih::MessageHookType p_type, int code, WPARA
                 pt.x = GET_X_LPARAM(((MSG*)lp)->lParam);
 
                 if (ScreenToClient(wnd_menu, &pt) && PtInRect(&toolbar, pt)) {
-                    t_size idx = SendMessage(wnd_menu, TB_HITTEST, 0, (long)&pt);
+                    size_t idx = SendMessage(wnd_menu, TB_HITTEST, 0, reinterpret_cast<LPARAM>(&pt));
 
                     if (idx >= 0 && idx < m_buttons.get_count())
                         redrop = false;
@@ -544,7 +543,7 @@ bool MenuToolbar::on_hooked_message(uih::MessageHookType p_type, int code, WPARA
                 if (!sub_menu_ref_count) {
                     destroy_menu();
                     if (active_item == 1)
-                        active_item = m_buttons.get_count();
+                        active_item = gsl::narrow<int>(m_buttons.get_count());
                     else
                         active_item--;
                     uPostMessage(get_wnd(), MSG_CREATE_MENU, active_item, 0);
@@ -554,7 +553,7 @@ bool MenuToolbar::on_hooked_message(uih::MessageHookType p_type, int code, WPARA
             case VK_RIGHT:
                 if (!is_submenu) {
                     destroy_menu();
-                    if (active_item == m_buttons.get_count())
+                    if (active_item == gsl::narrow<int>(m_buttons.get_count()))
                         active_item = 1;
                     else
                         active_item++;
@@ -579,11 +578,12 @@ bool MenuToolbar::on_hooked_message(uih::MessageHookType p_type, int code, WPARA
                 HWND wnd_hit = WindowFromPoint(px);
                 if (wnd_hit == wnd_menu) {
                     POINT pt = px;
-                    int hot_item = SendMessage(wnd_menu, TB_GETHOTITEM, 0, 0);
-                    if (ScreenToClient(wnd_menu, &pt)) {
-                        t_size idx = SendMessage(wnd_menu, TB_HITTEST, 0, (long)&pt);
 
-                        if (idx >= 0 && idx < m_buttons.get_count() && (active_item - 1) != idx) {
+                    if (ScreenToClient(wnd_menu, &pt)) {
+                        const int idx
+                            = static_cast<int>(SendMessage(wnd_menu, TB_HITTEST, 0, reinterpret_cast<LPARAM>(&pt)));
+
+                        if (idx >= 0 && idx < gsl::narrow<int>(m_buttons.get_count()) && (active_item - 1) != idx) {
                             destroy_menu();
                             active_item = idx + 1;
                             uPostMessage(get_wnd(), MSG_CREATE_MENU, active_item, 0);

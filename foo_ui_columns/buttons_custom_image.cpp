@@ -1,11 +1,24 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "buttons.h"
 
 namespace cui::toolbars::buttons {
 
-void ButtonsToolbar::Button::CustomImage::get_path(pfc::string8& p_out) const
+ButtonsToolbar::CustomImageContentType ButtonsToolbar::Button::CustomImage::content_type() const
 {
-    p_out.reset();
+    const auto extension = string_extension(m_path);
+
+    if (!_stricmp(extension, "ico"))
+        return CustomImageContentType::Ico;
+
+    if (!_stricmp(extension, "svg"))
+        return CustomImageContentType::Svg;
+
+    return CustomImageContentType::Other;
+}
+
+pfc::string8 ButtonsToolbar::Button::CustomImage::get_path() const
+{
+    pfc::string8 full_path;
 
     bool b_absolute = string_find_first(m_path, ':') != pfc_infinite
         || (m_path.length() > 1 && m_path.get_ptr()[0] == '\\' && m_path.get_ptr()[1] == '\\');
@@ -16,12 +29,14 @@ void ButtonsToolbar::Button::CustomImage::get_path(pfc::string8& p_out) const
     // pfc::string8 fullPath;
 
     if (b_relative_to_drive) {
-        t_size index_colon = fb2kexe.find_first(':');
+        size_t index_colon = fb2kexe.find_first(':');
         if (index_colon != pfc_infinite)
-            p_out.add_string(fb2kexe.get_ptr(), index_colon + 1);
+            full_path.add_string(fb2kexe.get_ptr(), index_colon + 1);
     } else if (!b_absolute)
-        p_out << string_directory(fb2kexe) << "\\";
-    p_out += m_path;
+        full_path << string_directory(fb2kexe) << "\\";
+    full_path += m_path;
+
+    return full_path;
 }
 void ButtonsToolbar::Button::CustomImage::write(stream_writer* out, abort_callback& p_abort) const
 {
@@ -45,8 +60,8 @@ void ButtonsToolbar::Button::CustomImage::read(ConfigVersion p_version, stream_r
         reader->read_lendian_t(m_mask_colour, p_abort);
 }
 
-void ButtonsToolbar::Button::CustomImage::read_from_file(ConfigVersion p_version, const char* p_base,
-    const char* p_name, stream_reader* p_file, unsigned p_size, abort_callback& p_abort)
+void ButtonsToolbar::Button::CustomImage::read_from_file(FCBVersion p_version, const char* p_base, const char* p_name,
+    stream_reader* p_file, unsigned p_size, abort_callback& p_abort)
 {
     // t_filesize p_start = p_file->get_position(p_abort);
     t_filesize read = 0;
@@ -80,7 +95,7 @@ void ButtonsToolbar::Button::CustomImage::read_from_file(ConfigVersion p_version
             t_filesize read2 = 0;
             // t_filesize p_start_data = p_file->get_position(p_abort);
             pfc::array_t<char> name;
-            pfc::array_t<t_uint8> data;
+            pfc::array_t<uint8_t> data;
             while (read2 /*p_file->get_position(p_abort) - p_start_data*/ < size /* && !p_file->is_eof(p_abort)*/) {
                 DWORD size_data;
                 Identifier id_data;
@@ -161,7 +176,7 @@ void ButtonsToolbar::Button::CustomImage::read_from_file(ConfigVersion p_version
             t_filesize read2 = 0;
             // t_filesize p_start_data = p_file->get_position(p_abort);
             pfc::array_t<char> name;
-            pfc::array_t<t_uint8> data;
+            pfc::array_t<uint8_t> data;
             while (read2 /*p_file->get_position(p_abort) - p_start_data*/ < size /* && !p_file->is_eof(p_abort)*/) {
                 DWORD size_data;
                 Identifier id_data;
@@ -247,55 +262,50 @@ void ButtonsToolbar::Button::CustomImage::read_from_file(ConfigVersion p_version
 void ButtonsToolbar::Button::CustomImage::write_to_file(stream_writer& p_file, bool b_paths, abort_callback& p_abort)
 {
     p_file.write_lendian_t(I_BUTTON_MASK_TYPE, p_abort);
-    p_file.write_lendian_t(sizeof(m_mask_type), p_abort);
+    p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_mask_type), p_abort);
     p_file.write_lendian_t(m_mask_type, p_abort);
 
     if (b_paths) {
         p_file.write_lendian_t(I_CUSTOM_BUTTON_PATH, p_abort);
-        p_file.write_lendian_t(m_path.length(), p_abort);
+        p_file.write_lendian_t(gsl::narrow<uint32_t>(m_path.length()), p_abort);
         p_file.write(m_path.get_ptr(), m_path.length(), p_abort);
     } else {
-        pfc::string8 realPath;
-        pfc::string8 canPath;
+        pfc::string8 full_path;
         try {
             p_file.write_lendian_t(I_BUTTON_CUSTOM_IMAGE_DATA, p_abort);
 
-            {
-                service_ptr_t<file> p_image;
-                get_path(realPath);
-                filesystem::g_get_canonical_path(realPath, canPath);
-                filesystem::g_open(p_image, canPath, filesystem::open_mode_read, p_abort);
+            pfc::string8 canonical_path;
+            service_ptr_t<file> p_image;
+            full_path = get_path();
+            filesystem::g_get_canonical_path(full_path, canonical_path);
+            filesystem::g_open(p_image, canonical_path, filesystem::open_mode_read, p_abort);
 
-                const auto name = string_filename_ext(m_path);
+            const auto name = string_filename_ext(m_path);
 
-                t_filesize imagesize = p_image->get_size(p_abort);
+            const auto imagesize = gsl::narrow<uint32_t>(p_image->get_size(p_abort));
 
-                if (imagesize >= MAXLONG)
-                    throw exception_io_device_full();
+            const auto size = gsl::narrow<uint32_t>(imagesize + name.length() + 4 * sizeof(uint32_t));
+            p_file.write_lendian_t(size, p_abort);
 
-                unsigned size = (unsigned)imagesize + name.length() + 4 * sizeof(t_uint32);
-                p_file.write_lendian_t(size, p_abort);
+            p_file.write_lendian_t(IMAGE_NAME, p_abort);
+            p_file.write_lendian_t(gsl::narrow<uint32_t>(name.length()), p_abort);
+            p_file.write(name.get_ptr(), name.length(), p_abort);
 
-                p_file.write_lendian_t(IMAGE_NAME, p_abort);
-                p_file.write_lendian_t(name.length(), p_abort);
-                p_file.write(name.get_ptr(), name.length(), p_abort);
-
-                p_file.write_lendian_t(IMAGE_DATA, p_abort);
-                p_file.write_lendian_t((unsigned)imagesize, p_abort);
-                pfc::array_t<t_uint8> temp;
-                temp.set_size((unsigned)imagesize);
-                p_image->read(temp.get_ptr(), temp.get_size(), p_abort);
-                p_file.write(temp.get_ptr(), temp.get_size(), p_abort);
-            }
+            p_file.write_lendian_t(IMAGE_DATA, p_abort);
+            p_file.write_lendian_t((unsigned)imagesize, p_abort);
+            pfc::array_t<uint8_t> temp;
+            temp.set_size((unsigned)imagesize);
+            p_image->read(temp.get_ptr(), temp.get_size(), p_abort);
+            p_file.write(temp.get_ptr(), temp.get_size(), p_abort);
         } catch (const pfc::exception& err) {
             pfc::string_formatter formatter;
-            throw pfc::exception(formatter << "Error reading file \"" << realPath << "\" : " << err.what());
+            throw pfc::exception(formatter << "Error reading file \"" << full_path << "\" : " << err.what());
         }
     }
     if (m_mask_type == uie::MASK_BITMAP) {
         if (b_paths) {
             p_file.write_lendian_t(I_CUSTOM_BUTTON_MASK_PATH, p_abort);
-            p_file.write_lendian_t(m_mask_path.length(), p_abort);
+            p_file.write_lendian_t(gsl::narrow<uint32_t>(m_mask_path.length()), p_abort);
             p_file.write(m_mask_path.get_ptr(), m_mask_path.length(), p_abort);
         } else {
             try {
@@ -306,22 +316,20 @@ void ButtonsToolbar::Button::CustomImage::write_to_file(stream_writer& p_file, b
 
                 const auto name = string_filename_ext(m_mask_path);
 
-                t_filesize imagesize = p_image->get_size(p_abort);
+                const auto imagesize = gsl::narrow<uint32_t>(p_image->get_size(p_abort));
 
-                if (imagesize >= MAXLONG)
-                    throw exception_io_device_full();
-
-                unsigned size = (unsigned)imagesize + name.length() + sizeof(IMAGE_NAME) + sizeof(IMAGE_DATA);
+                const auto size
+                    = gsl::narrow<uint32_t>(imagesize + name.length() + sizeof(IMAGE_NAME) + sizeof(IMAGE_DATA));
                 p_file.write_lendian_t(size, p_abort);
 
                 p_file.write_lendian_t(IMAGE_NAME, p_abort);
-                p_file.write_lendian_t(name.length(), p_abort);
+                p_file.write_lendian_t(gsl::narrow<uint32_t>(name.length()), p_abort);
                 p_file.write(name.get_ptr(), name.length(), p_abort);
 
                 p_file.write_lendian_t(IMAGE_DATA, p_abort);
-                p_file.write_lendian_t((unsigned)imagesize, p_abort);
-                pfc::array_t<t_uint8> temp;
-                temp.set_size((unsigned)imagesize);
+                p_file.write_lendian_t(imagesize, p_abort);
+                pfc::array_t<uint8_t> temp;
+                temp.set_size(imagesize);
                 p_image->read(temp.get_ptr(), temp.get_size(), p_abort);
                 p_file.write(temp.get_ptr(), temp.get_size(), p_abort);
             } catch (const pfc::exception& err) {
@@ -333,7 +341,7 @@ void ButtonsToolbar::Button::CustomImage::write_to_file(stream_writer& p_file, b
 
     if (m_mask_type == uie::MASK_COLOUR) {
         p_file.write_lendian_t(I_BUTTON_MASK_COLOUR, p_abort);
-        p_file.write_lendian_t(sizeof(m_mask_colour), p_abort);
+        p_file.write_lendian_t(mmh::sizeof_t<uint32_t>(m_mask_colour), p_abort);
         p_file.write_lendian_t(m_mask_colour, p_abort);
     }
 }

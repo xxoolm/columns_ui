@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "seekbar.h"
 
 #include "dark_mode_trackbar.h"
@@ -12,7 +12,7 @@ pfc::ptr_list_t<SeekBarToolbar> SeekBarToolbar::windows;
 void SeekBarToolbar::SeekBarTrackbarCallback::on_position_change(unsigned pos, bool b_tracking)
 {
     if (!b_tracking || (GetKeyState(VK_SHIFT) & KF_UP))
-        static_api_ptr_t<play_control>()->playback_seek(pos / 10.0);
+        play_control::get()->playback_seek(pos / 10.0);
 }
 
 void SeekBarToolbar::SeekBarTrackbarCallback::get_tooltip_text(unsigned pos, uih::TrackbarString& out)
@@ -30,24 +30,20 @@ void SeekBarToolbar::set_custom_colours()
 
 void SeekBarToolbar::update_seekbars(bool positions_only)
 {
-    unsigned n;
-    unsigned count = windows.get_count();
     if (positions_only) {
-        for (n = 0; n < count; n++)
-            if (windows[n]->get_wnd())
-                windows[n]->update_seek_pos();
+        for (auto&& window : windows)
+            if (window->get_wnd())
+                window->update_seek_pos();
     } else {
-        for (n = 0; n < count; n++)
-            if (windows[n]->get_wnd())
-                windows[n]->update_seek();
+        for (auto&& window : windows)
+            if (window->get_wnd())
+                window->update_seek();
     }
 }
 
-unsigned SeekBarToolbar::g_seek_timer = 0;
-
 void SeekBarToolbar::update_seek_timer()
 {
-    if (windows.get_count() && static_api_ptr_t<playback_control>()->is_playing()) {
+    if (windows.get_count() && playback_control::get()->is_playing()) {
         if (!g_seek_timer) {
             g_seek_timer = SetTimer(nullptr, NULL, 150, (TIMERPROC)SeekTimerProc);
         }
@@ -62,7 +58,7 @@ void SeekBarToolbar::update_seek_pos()
     if (wnd_seekbar == nullptr)
         return;
 
-    static_api_ptr_t<play_control> play_api;
+    const auto play_api = play_control::get();
 
     if (play_api->is_playing() && play_api->playback_get_length() /* && play_api->playback_can_seek()*/) {
         double position = 0;
@@ -82,7 +78,7 @@ void SeekBarToolbar::update_seek_pos()
 
 VOID CALLBACK SeekBarToolbar::SeekTimerProc(HWND wnd, UINT msg, UINT event, DWORD time)
 {
-    if (windows.get_count() && static_api_ptr_t<playback_control>()->is_playing())
+    if (windows.get_count() && playback_control::get()->is_playing())
         update_seekbars(true);
 }
 
@@ -97,7 +93,7 @@ void SeekBarToolbar::update_seek()
     if (wnd_seekbar == nullptr)
         return;
 
-    static_api_ptr_t<play_control> play_api;
+    const auto play_api = play_control::get();
 
     if (play_api->is_playing() && play_api->playback_get_length() /* && play_api->playback_can_seek()*/) {
         double position = 0;
@@ -155,6 +151,12 @@ LRESULT SeekBarToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             m_dark_mode_notifier
                 = std::make_unique<colours::dark_mode_notifier>([this, self = ptr{this}] { set_custom_colours(); });
 
+            m_modern_colours_changed_token
+                = system_appearance_manager::add_modern_colours_change_handler([this, self = ptr{this}] {
+                      if (colours::is_dark_mode_active())
+                          set_custom_colours();
+                  });
+
             update_seek();
 
             update_seek_timer();
@@ -177,16 +179,16 @@ LRESULT SeekBarToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
         return 0;
     }
+    case WM_DESTROY:
+        m_modern_colours_changed_token.reset();
+        m_dark_mode_notifier.reset();
 
-    case WM_DESTROY: {
-        if (initialised) {
-            m_dark_mode_notifier.reset();
+        if (m_child.get_wnd())
             m_child.destroy();
-            windows.remove_item(this);
-            initialised = false;
-        }
+
+        windows.remove_item(this);
+        initialised = false;
         break;
-    }
     }
     return DefWindowProc(wnd, msg, wp, lp);
 }

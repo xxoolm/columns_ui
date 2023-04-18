@@ -16,3 +16,9 @@
 [submodule "fbh"]
 	path = fbh
 	url = https://github.com/reupen/fbh.git
+[submodule "scripts"]
+	path = scripts
+	url = https://github.com/reupen/foobar2000-development-scripts.git
+[submodule "svg-services"]
+	path = svg-services
+	url = https://github.com/reupen/svg-services.git

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "item_details.h"
 
 namespace cui::panels::item_details {
@@ -96,7 +96,7 @@ bool ItemDetails::show_config_popup(HWND wnd_parent)
 
         if (get_wnd()) {
             m_to.release();
-            static_api_ptr_t<titleformat_compiler>()->compile_safe(m_to, m_script);
+            titleformat_compiler::get()->compile_safe(m_to, m_script);
 
             on_edge_style_change();
             refresh_contents();
@@ -106,11 +106,10 @@ bool ItemDetails::show_config_popup(HWND wnd_parent)
     return false;
 }
 
-void ItemDetails::set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void ItemDetails::set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     if (p_size) {
-        t_size version;
-        p_reader->read_lendian_t(version, p_abort);
+        const auto version = p_reader->read_lendian_t<uint32_t>(p_abort);
         if (version <= stream_version_current) {
             p_reader->read_string(m_script, p_abort);
             p_reader->read_lendian_t(m_tracking_mode, p_abort);
@@ -129,7 +128,7 @@ void ItemDetails::set_config(stream_reader* p_reader, t_size p_size, abort_callb
 
 void ItemDetails::get_config(stream_writer* p_writer, abort_callback& p_abort) const
 {
-    p_writer->write_lendian_t((t_size)stream_version_current, p_abort);
+    p_writer->write_lendian_t(static_cast<uint32_t>(stream_version_current), p_abort);
     p_writer->write_string(m_script, p_abort);
     p_writer->write_lendian_t(m_tracking_mode, p_abort);
     p_writer->write_lendian_t(m_hscroll, p_abort);
@@ -152,28 +151,7 @@ void ItemDetails::get_menu_items(ui_extension::menu_hook_t& p_hook)
     p_hook.add_node(p_node);
 }
 
-ItemDetails::MessageWindow ItemDetails::g_message_window;
-
 std::vector<ItemDetails*> ItemDetails::g_windows;
-
-ItemDetails::MessageWindow::class_data& ItemDetails::MessageWindow::get_class_data() const
-{
-    __implement_get_class_data_ex(_T("\r\n{6EB3EA81-7C5E-468d-B507-E5527F52361B}"), _T(""), false, 0, 0, 0, 0);
-}
-
-LRESULT ItemDetails::MessageWindow::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_CREATE:
-        break;
-    case WM_ACTIVATEAPP:
-        g_on_app_activate(wp != 0);
-        break;
-    case WM_DESTROY:
-        break;
-    }
-    return DefWindowProc(wnd, msg, wp, lp);
-}
 
 void ItemDetails::g_on_app_activate(bool b_activated)
 {
@@ -216,7 +194,7 @@ void ItemDetails::register_callback()
 void ItemDetails::deregister_callback()
 {
     if (m_callback_registered)
-        static_api_ptr_t<ui_selection_manager>()->unregister_callback(this);
+        ui_selection_manager::get()->unregister_callback(this);
     m_callback_registered = false;
 }
 
@@ -349,14 +327,14 @@ void ItemDetails::refresh_contents(bool reset_vertical_scroll_position, bool res
     bool b_Update = true;
     if (m_handles.get_count()) {
         LOGFONT lf;
-        static_api_ptr_t<fonts::manager>()->get_font(g_guid_item_details_font_client, lf);
+        fb2k::std_api_get<fonts::manager>()->get_font(g_guid_item_details_font_client, lf);
 
         TitleformatHookChangeFont tf_hook(lf);
         pfc::string8_fast_aggressive temp;
         temp.prealloc(2048);
 
         if (m_nowplaying_active) {
-            static_api_ptr_t<playback_control>()->playback_format_title(
+            playback_control::get()->playback_format_title(
                 &tf_hook, temp, m_to, nullptr, playback_control::display_level_all);
         } else {
             const auto handle = m_handles[0];
@@ -404,7 +382,7 @@ void ItemDetails::update_display_info(HDC dc)
         GetClientRect(get_wnd(), &rc);
         const auto padding_size = uih::scale_dpi_value(2) * 2;
 
-        t_size widthMax = rc.right > padding_size ? rc.right - padding_size : 0;
+        const auto widthMax = rc.right > padding_size ? rc.right - padding_size : 0;
         m_current_display_text = m_current_text;
 
         auto display_info = g_get_multiline_text_dimensions(
@@ -498,7 +476,7 @@ void ItemDetails::on_playback_stop(play_control::t_stop_reason p_reason)
 
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
         if (m_tracking_mode == track_auto_playlist_playing) {
-            static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+            playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         } else if (m_tracking_mode == track_auto_selection_playing) {
             handles = m_selection_handles;
         }
@@ -509,18 +487,18 @@ void ItemDetails::on_playback_stop(play_control::t_stop_reason p_reason)
 void ItemDetails::on_playlist_switch()
 {
     if (g_track_mode_includes_plalist(m_tracking_mode)
-        && (!g_track_mode_includes_auto(m_tracking_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+        && (!g_track_mode_includes_auto(m_tracking_mode) || !play_control::get()->is_playing())) {
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         set_handles(handles);
     }
 }
 void ItemDetails::on_items_selection_change(const bit_array& p_affected, const bit_array& p_state)
 {
     if (g_track_mode_includes_plalist(m_tracking_mode)
-        && (!g_track_mode_includes_auto(m_tracking_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+        && (!g_track_mode_includes_auto(m_tracking_mode) || !play_control::get()->is_playing())) {
         metadb_handle_list_t<pfc::alloc_fast_aggressive> handles;
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
         set_handles(handles);
     }
 }
@@ -529,9 +507,9 @@ void ItemDetails::on_changed_sorted(metadb_handle_list_cref p_items_sorted, bool
 {
     if (!p_fromhook && !m_nowplaying_active) {
         bool b_refresh = false;
-        t_size count = m_handles.get_count();
-        for (t_size i = 0; i < count && !b_refresh; i++) {
-            t_size index = pfc_infinite;
+        size_t count = m_handles.get_count();
+        for (size_t i = 0; i < count && !b_refresh; i++) {
+            size_t index = pfc_infinite;
             if (p_items_sorted.bsearch_t(pfc::compare_t<metadb_handle_ptr, metadb_handle_ptr>, m_handles[i], index))
                 b_refresh = true;
         }
@@ -561,7 +539,7 @@ void ItemDetails::on_selection_changed(const pfc::list_base_const_t<metadb_handl
             m_selection_handles = p_selection;
 
         if (g_track_mode_includes_selection(m_tracking_mode)
-            && (!g_track_mode_includes_auto(m_tracking_mode) || !static_api_ptr_t<play_control>()->is_playing())) {
+            && (!g_track_mode_includes_auto(m_tracking_mode) || !play_control::get()->is_playing())) {
             set_handles(m_selection_handles);
         }
     }
@@ -578,13 +556,13 @@ void ItemDetails::on_tracking_mode_change()
 
     m_nowplaying_active = false;
 
-    if (g_track_mode_includes_now_playing(m_tracking_mode) && static_api_ptr_t<play_control>()->is_playing()) {
+    if (g_track_mode_includes_now_playing(m_tracking_mode) && play_control::get()->is_playing()) {
         metadb_handle_ptr item;
-        if (static_api_ptr_t<playback_control>()->get_now_playing(item))
+        if (playback_control::get()->get_now_playing(item))
             handles.add_item(item);
         m_nowplaying_active = true;
     } else if (g_track_mode_includes_plalist(m_tracking_mode)) {
-        static_api_ptr_t<playlist_manager_v3>()->activeplaylist_get_selected_items(handles);
+        playlist_manager_v3::get()->activeplaylist_get_selected_items(handles);
     } else if (g_track_mode_includes_selection(m_tracking_mode)) {
         handles = m_selection_handles;
     }
@@ -608,7 +586,7 @@ void ItemDetails::on_size()
     on_size(RECT_CX(rc), RECT_CY(rc));
 }
 
-void ItemDetails::on_size(t_size cx, t_size cy)
+void ItemDetails::on_size(size_t cx, size_t cy)
 {
     reset_display_info();
     invalidate_all(false);
@@ -670,43 +648,38 @@ LRESULT ItemDetails::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CREATE: {
         set_window_theme();
         register_callback();
-        static_api_ptr_t<play_callback_manager>()->register_callback(
+        play_callback_manager::get()->register_callback(
             this, flag_on_playback_all & ~(flag_on_volume_change | flag_on_playback_starting), false);
-        static_api_ptr_t<playlist_manager_v3>()->register_callback(this, playlist_callback_flags);
-        static_api_ptr_t<metadb_io_v3>()->register_callback(this);
+        playlist_manager_v3::get()->register_callback(this, playlist_callback_flags);
+        metadb_io_v3::get()->register_callback(this);
 
         m_font_changes.m_default_font = std::make_shared<Font>();
         m_font_changes.m_default_font->m_font.reset(
-            static_api_ptr_t<fonts::manager>()->get_font(g_guid_item_details_font_client));
-        m_font_changes.m_default_font->m_height = uGetFontHeight(m_font_changes.m_default_font->m_font.get());
+            fb2k::std_api_get<fonts::manager>()->get_font(g_guid_item_details_font_client));
+        m_font_changes.m_default_font->m_height = uih::get_font_height(m_font_changes.m_default_font->m_font.get());
 
         if (g_windows.empty())
-            g_message_window.create(nullptr);
+            s_create_message_window();
+
         g_windows.push_back(this);
 
-        auto lpcs = (LPCREATESTRUCT)lp;
-
-        static_api_ptr_t<titleformat_compiler>()->compile_safe(m_to, m_script);
+        titleformat_compiler::get()->compile_safe(m_to, m_script);
 
         on_size(/*lpcs->cx, lpcs->cy*/);
         on_tracking_mode_change();
         refresh_contents(true, true);
-
-        // FIXME
-        // m_library_richedit = LoadLibrary(L"Msftedit.dll");
-        // m_wnd_richedit = CreateWindowEx(NULL, MSFTEDIT_CLASS, L"MooMooCoCoBananas", WS_VISIBLE| WS_CHILD | WS_BORDER,
-        // 0, 0, 200, 200, wnd, HMENU(1001), core_api::get_my_instance(), NULL);
     } break;
     case WM_DESTROY: {
         std::erase(g_windows, this);
+
         if (g_windows.empty())
-            g_message_window.destroy();
+            s_destroy_message_window();
 
         m_font_changes.m_default_font.reset();
 
-        static_api_ptr_t<play_callback_manager>()->unregister_callback(this);
-        static_api_ptr_t<metadb_io_v3>()->unregister_callback(this);
-        static_api_ptr_t<playlist_manager_v3>()->unregister_callback(this);
+        play_callback_manager::get()->unregister_callback(this);
+        metadb_io_v3::get()->unregister_callback(this);
+        playlist_manager_v3::get()->unregister_callback(this);
         deregister_callback();
         release_all_full_file_info_requests();
         m_handles.remove_all();
@@ -718,7 +691,7 @@ LRESULT ItemDetails::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     } break;
     case WM_SETFOCUS:
         deregister_callback();
-        m_selection_holder = static_api_ptr_t<ui_selection_manager>()->acquire();
+        m_selection_holder = ui_selection_manager::get()->acquire();
         m_selection_holder->set_selection(m_handles);
         break;
     case WM_KILLFOCUS:
@@ -923,7 +896,7 @@ void ItemDetails::g_on_colours_change()
 void ItemDetails::on_font_change()
 {
     m_font_changes.m_default_font->m_font.reset(
-        static_api_ptr_t<fonts::manager>()->get_font(g_guid_item_details_font_client));
+        fb2k::std_api_get<fonts::manager>()->get_font(g_guid_item_details_font_client));
     refresh_contents();
     /*
     invalidate_all(false);
@@ -949,6 +922,27 @@ ItemDetails::ItemDetails()
 {
 }
 
+void ItemDetails::s_create_message_window()
+{
+    uie::container_window_v3_config config(L"{6EB3EA81-7C5E-468d-B507-E5527F52361B}", false);
+    config.window_styles = 0;
+    config.extended_window_styles = 0;
+
+    s_message_window = std::make_unique<uie::container_window_v3>(
+        config, [](auto&& wnd, auto&& msg, auto&& wp, auto&& lp) -> LRESULT {
+            if (msg == WM_ACTIVATEAPP)
+                g_on_app_activate(wp != 0);
+            return DefWindowProc(wnd, msg, wp, lp);
+        });
+    s_message_window->create(nullptr);
+}
+
+void ItemDetails::s_destroy_message_window()
+{
+    s_message_window->destroy();
+    s_message_window.reset();
+}
+
 void ItemDetails::set_config_wnd(HWND wnd)
 {
     m_wnd_config = wnd;
@@ -960,7 +954,7 @@ void ItemDetails::set_script(const char* p_script)
 
     if (get_wnd()) {
         m_to.release();
-        static_api_ptr_t<titleformat_compiler>()->compile_safe(m_to, m_script);
+        titleformat_compiler::get()->compile_safe(m_to, m_script);
 
         on_edge_style_change();
         refresh_contents();
@@ -979,7 +973,7 @@ void ItemDetails::on_edge_style_change()
     SetWindowPos(get_wnd(), nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 }
 
-void ItemDetails::set_edge_style(t_size edge_style)
+void ItemDetails::set_edge_style(uint32_t edge_style)
 {
     m_edge_style = edge_style;
     if (get_wnd()) {
@@ -987,7 +981,7 @@ void ItemDetails::set_edge_style(t_size edge_style)
     }
 }
 
-void ItemDetails::set_vertical_alignment(t_size vertical_alignment)
+void ItemDetails::set_vertical_alignment(uint32_t vertical_alignment)
 {
     if (get_wnd()) {
         m_vertical_alignment = vertical_alignment;
@@ -997,7 +991,7 @@ void ItemDetails::set_vertical_alignment(t_size vertical_alignment)
     }
 }
 
-void ItemDetails::set_horizontal_alignment(t_size horizontal_alignment)
+void ItemDetails::set_horizontal_alignment(uint32_t horizontal_alignment)
 {
     if (get_wnd()) {
         m_horizontal_alignment = horizontal_alignment;
@@ -1007,15 +1001,15 @@ void ItemDetails::set_horizontal_alignment(t_size horizontal_alignment)
     }
 }
 
-void ItemDetails::on_playback_order_changed(t_size p_new_index) {}
+void ItemDetails::on_playback_order_changed(size_t p_new_index) {}
 
 void ItemDetails::on_default_format_changed() {}
 
 void ItemDetails::on_playlist_locked(bool p_locked) {}
 
-void ItemDetails::on_playlist_renamed(const char* p_new_name, t_size p_new_name_len) {}
+void ItemDetails::on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) {}
 
-void ItemDetails::on_item_ensure_visible(t_size p_idx) {}
+void ItemDetails::on_item_ensure_visible(size_t p_idx) {}
 
 void ItemDetails::on_items_replaced(
     const bit_array& p_mask, const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data)
@@ -1026,53 +1020,53 @@ void ItemDetails::on_items_modified_fromplayback(const bit_array& p_mask, play_c
 
 void ItemDetails::on_items_modified(const bit_array& p_mask) {}
 
-void ItemDetails::on_items_removed(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) {}
+void ItemDetails::on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) {}
 
-void ItemDetails::on_items_removing(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) {}
+void ItemDetails::on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) {}
 
-void ItemDetails::on_items_reordered(const t_size* p_order, t_size p_count) {}
+void ItemDetails::on_items_reordered(const size_t* p_order, size_t p_count) {}
 
 void ItemDetails::on_items_added(
-    t_size p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection)
+    size_t p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection)
 {
 }
 
-void ItemDetails::on_item_focus_change(t_size p_from, t_size p_to) {}
+void ItemDetails::on_item_focus_change(size_t p_from, size_t p_to) {}
 
 void ItemDetails::on_volume_change(float p_new_val) {}
 
 void ItemDetails::on_playback_starting(play_control::t_track_command p_command, bool p_paused) {}
 
-bool ItemDetails::g_track_mode_includes_selection(t_size mode)
+bool ItemDetails::g_track_mode_includes_selection(size_t mode)
 {
     return mode == track_auto_selection_playing || mode == track_selection;
 }
 
-bool ItemDetails::g_track_mode_includes_auto(t_size mode)
+bool ItemDetails::g_track_mode_includes_auto(size_t mode)
 {
     return mode == track_auto_playlist_playing || mode == track_auto_selection_playing;
 }
 
-bool ItemDetails::g_track_mode_includes_plalist(t_size mode)
+bool ItemDetails::g_track_mode_includes_plalist(size_t mode)
 {
     return mode == track_auto_playlist_playing || mode == track_playlist;
 }
 
-bool ItemDetails::g_track_mode_includes_now_playing(t_size mode)
+uie::container_window_v3_config ItemDetails::get_window_config()
 {
-    return mode == track_auto_playlist_playing || mode == track_auto_selection_playing || mode == track_playing;
+    uie::container_window_v3_config config(L"columns_ui_item_details_E0D8v091EU8", false);
+
+    if (m_edge_style == 1)
+        config.extended_window_styles |= WS_EX_CLIENTEDGE;
+    if (m_edge_style == 2)
+        config.extended_window_styles |= WS_EX_STATICEDGE;
+
+    return config;
 }
 
-ItemDetails::class_data& ItemDetails::get_class_data() const
+bool ItemDetails::g_track_mode_includes_now_playing(size_t mode)
 {
-    DWORD flags = 0;
-    if (m_edge_style == 1)
-        flags |= WS_EX_CLIENTEDGE;
-    if (m_edge_style == 2)
-        flags |= WS_EX_STATICEDGE;
-    __implement_get_class_data_ex(_T("\r\nCUI_Item_Details_Panel"), _T(""), false, 0,
-        WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, WS_EX_CONTROLPARENT | flags, 0);
-    //__implement_get_class_data(L"", false);
+    return mode == track_auto_playlist_playing || mode == track_auto_selection_playing || mode == track_playing;
 }
 
 uie::window_factory<ItemDetails> g_item_details;
@@ -1132,12 +1126,12 @@ ItemDetails::MenuNodeAlignmentPopup::MenuNodeAlignmentPopup(ItemDetails* p_wnd)
     m_items.add_item(new MenuNodeAlignment(p_wnd, 2));
 }
 
-void ItemDetails::MenuNodeAlignmentPopup::get_child(unsigned p_index, uie::menu_node_ptr& p_out) const
+void ItemDetails::MenuNodeAlignmentPopup::get_child(size_t p_index, uie::menu_node_ptr& p_out) const
 {
     p_out = m_items[p_index].get_ptr();
 }
 
-unsigned ItemDetails::MenuNodeAlignmentPopup::get_children_count() const
+size_t ItemDetails::MenuNodeAlignmentPopup::get_children_count() const
 {
     return m_items.get_count();
 }
@@ -1149,7 +1143,7 @@ bool ItemDetails::MenuNodeAlignmentPopup::get_display_data(pfc::string_base& p_o
     return true;
 }
 
-ItemDetails::MenuNodeAlignment::MenuNodeAlignment(ItemDetails* p_wnd, t_size p_value) : p_this(p_wnd), m_type(p_value)
+ItemDetails::MenuNodeAlignment::MenuNodeAlignment(ItemDetails* p_wnd, uint32_t p_value) : p_this(p_wnd), m_type(p_value)
 {
 }
 
@@ -1174,7 +1168,7 @@ bool ItemDetails::MenuNodeAlignment::get_display_data(pfc::string_base& p_out, u
     return true;
 }
 
-const char* ItemDetails::MenuNodeAlignment::get_name(t_size source)
+const char* ItemDetails::MenuNodeAlignment::get_name(uint32_t source)
 {
     if (source == 0)
         return "Left";
@@ -1194,12 +1188,12 @@ ItemDetails::MenuNodeSourcePopup::MenuNodeSourcePopup(ItemDetails* p_wnd)
     m_items.add_item(new MenuNodeTrackMode(p_wnd, 1));
 }
 
-void ItemDetails::MenuNodeSourcePopup::get_child(unsigned p_index, uie::menu_node_ptr& p_out) const
+void ItemDetails::MenuNodeSourcePopup::get_child(size_t p_index, uie::menu_node_ptr& p_out) const
 {
     p_out = m_items[p_index].get_ptr();
 }
 
-unsigned ItemDetails::MenuNodeSourcePopup::get_children_count() const
+size_t ItemDetails::MenuNodeSourcePopup::get_children_count() const
 {
     return m_items.get_count();
 }
@@ -1211,7 +1205,9 @@ bool ItemDetails::MenuNodeSourcePopup::get_display_data(pfc::string_base& p_out,
     return true;
 }
 
-ItemDetails::MenuNodeTrackMode::MenuNodeTrackMode(ItemDetails* p_wnd, t_size p_value) : p_this(p_wnd), m_source(p_value)
+ItemDetails::MenuNodeTrackMode::MenuNodeTrackMode(ItemDetails* p_wnd, uint32_t p_value)
+    : p_this(p_wnd)
+    , m_source(p_value)
 {
 }
 
@@ -1234,7 +1230,7 @@ bool ItemDetails::MenuNodeTrackMode::get_display_data(pfc::string_base& p_out, u
     return true;
 }
 
-const char* ItemDetails::MenuNodeTrackMode::get_name(t_size source)
+const char* ItemDetails::MenuNodeTrackMode::get_name(uint32_t source)
 {
     if (source == track_playing)
         return "Playing item";

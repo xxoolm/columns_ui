@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "splitter.h"
 
 namespace cui::panels::splitter {
@@ -34,14 +34,8 @@ void FlatSplitterPanel::Panel::on_size(int cx, int cy)
 
     if (m_wnd_child)
         SetWindowPos(m_wnd_child, nullptr, x, y, cx - x, cy - y, SWP_NOZORDER);
-    if (caption_size /*&& (m_caption_orientation == vertical || (m_container.m_uxtheme.is_valid() && m_container.m_theme))*/)
-    {
-        int caption_cx = m_caption_orientation == vertical ? caption_size : cx;
-        int caption_cy = m_caption_orientation == vertical ? cy : caption_size;
 
-        RECT rc_caption = {0, 0, caption_cx, caption_cy};
-        RedrawWindow(m_wnd, &rc_caption, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
-    }
+    RedrawWindow(m_wnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE);
 }
 
 void FlatSplitterPanel::Panel::on_size()
@@ -101,7 +95,7 @@ void FlatSplitterPanel::Panel::import(stream_reader* t, abort_callback& p_abort)
     t->read_lendian_t(m_show_toggle_area, p_abort);
     unsigned data_size;
     t->read_lendian_t(data_size, p_abort);
-    pfc::array_t<t_uint8> data;
+    pfc::array_t<uint8_t> data;
     data.set_size(data_size);
     t->read(data.get_ptr(), data_size, p_abort);
     t->read_lendian_t(m_use_custom_title, p_abort);
@@ -142,7 +136,7 @@ void FlatSplitterPanel::Panel::write(stream_writer* out, abort_callback& p_abort
     out->write_lendian_t(m_show_toggle_area, p_abort);
 
     refresh_child_data();
-    out->write_lendian_t(m_child_data.get_size(), p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(m_child_data.get_size()), p_abort);
     out->write(m_child_data.get_ptr(), m_child_data.get_size(), p_abort);
 
     out->write_lendian_t(m_use_custom_title, p_abort);
@@ -178,7 +172,7 @@ void FlatSplitterPanel::Panel::_export(stream_writer* out, abort_callback& p_abo
     out->write_lendian_t(m_autohide, p_abort);
     out->write_lendian_t(m_size.get_scaled_value(), p_abort);
     out->write_lendian_t(m_show_toggle_area, p_abort);
-    out->write_lendian_t(child_exported_data.m_data.get_size(), p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(child_exported_data.m_data.get_size()), p_abort);
     out->write(child_exported_data.m_data.get_ptr(), child_exported_data.m_data.get_size(), p_abort);
     out->write_lendian_t(m_use_custom_title, p_abort);
     out->write_string(m_custom_title, p_abort);
@@ -231,10 +225,10 @@ uie::splitter_item_full_v2_t* FlatSplitterPanel::Panel::create_splitter_item(boo
     return ret;
 }
 
-bool FlatSplitterPanel::PanelList::find_by_wnd_child(HWND wnd, unsigned& p_out)
+bool FlatSplitterPanel::PanelList::find_by_wnd_child(HWND wnd, size_t& p_out)
 {
-    unsigned count = get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = get_count();
+    for (size_t n = 0; n < count; n++) {
         if (get_item(n)->m_wnd_child == wnd) {
             p_out = n;
             return true;
@@ -243,10 +237,10 @@ bool FlatSplitterPanel::PanelList::find_by_wnd_child(HWND wnd, unsigned& p_out)
     return false;
 }
 
-bool FlatSplitterPanel::PanelList::find_by_wnd(HWND wnd, unsigned& p_out)
+bool FlatSplitterPanel::PanelList::find_by_wnd(HWND wnd, size_t& p_out)
 {
-    unsigned count = get_count();
-    for (unsigned n = 0; n < count; n++) {
+    const auto count = get_count();
+    for (size_t n = 0; n < count; n++) {
         if (get_item(n)->m_wnd == wnd) {
             p_out = n;
             return true;

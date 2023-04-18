@@ -80,7 +80,7 @@ public:
     using self_t = SharedCellStyleData;
     using ptr = pfc::refcounted_object_ptr_t<self_t>;
 
-    SharedCellStyleData(const CellStyleData& in) : CellStyleData(in) {}
+    explicit SharedCellStyleData(const CellStyleData& in) : CellStyleData(in) {}
     SharedCellStyleData(const SharedCellStyleData&) = delete;
     SharedCellStyleData& operator=(const SharedCellStyleData&) = delete;
     SharedCellStyleData(SharedCellStyleData&&) = delete;
@@ -96,19 +96,19 @@ using style_data_t = pfc::array_t<SharedCellStyleData::ptr>;
 
 class StyleTitleformatHook : public titleformat_hook {
     CellStyleData p_default_colours;
-    pfc::array_t<char> text, selected_text, back, selected_back, selected_back_no_focus, selected_text_no_focus,
-        m_index_text;
+    pfc::array_t<char> text, selected_text, back, selected_back, selected_back_no_focus, selected_text_no_focus;
+    std::optional<std::string> m_index_text;
     CellStyleData& p_colours;
-    t_size m_index;
+    size_t m_index;
     bool m_is_group;
 
 public:
     bool process_field(
-        titleformat_text_out* p_out, const char* p_name, unsigned p_name_length, bool& p_found_flag) override;
-    bool process_function(titleformat_text_out* p_out, const char* p_name, unsigned p_name_length,
+        titleformat_text_out* p_out, const char* p_name, size_t p_name_length, bool& p_found_flag) override;
+    bool process_function(titleformat_text_out* p_out, const char* p_name, size_t p_name_length,
         titleformat_hook_function_params* p_params, bool& p_found_flag) override;
 
-    StyleTitleformatHook(CellStyleData& vars, t_size index, bool b_is_group = false)
+    StyleTitleformatHook(CellStyleData& vars, size_t index, bool b_is_group = false)
         : p_default_colours(vars)
         , p_colours(vars)
         , m_index(index)

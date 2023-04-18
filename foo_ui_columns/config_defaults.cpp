@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "main_window.h"
 
 COLORREF get_default_colour(colours::ColourID index, bool themed)
@@ -39,12 +39,14 @@ WINDOWPLACEMENT get_def_window_pos()
 
 LOGFONT get_menu_font()
 {
-    static logfont_os_menu font;
+    LOGFONT font{};
+    uGetMenuFont(&font);
     return font;
 }
 
 LOGFONT get_icon_font()
 {
-    static logfont_os_icon font;
+    LOGFONT font{};
+    uGetIconFont(&font);
     return font;
 }

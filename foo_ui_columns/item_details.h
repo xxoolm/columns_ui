@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stdafx.h"
+#include "pch.h"
 #include "file_info_reader.h"
 
 namespace cui::panels::item_details {
@@ -24,14 +24,14 @@ extern cfg_uint cfg_item_details_vertical_alignment;
 extern cfg_bool cfg_item_details_word_wrapping;
 
 struct LineSize {
-    t_size m_length{};
+    size_t m_length{};
     int m_width{0};
     int m_height{0};
 };
 
 struct RawFont {
     std::wstring m_face;
-    t_size m_point{10};
+    uint32_t m_point{10};
     bool m_bold{false};
     bool m_underline{false};
     bool m_italic{false};
@@ -45,7 +45,7 @@ class RawFontChange {
 public:
     RawFont m_font_data;
     bool m_reset{false};
-    t_size m_character_index{NULL};
+    size_t m_character_index{NULL};
 
     RawFontChange() = default;
 };
@@ -71,7 +71,7 @@ class FontChanges {
 public:
     class FontChange {
     public:
-        t_size m_text_index{};
+        size_t m_text_index{};
         Font::Ptr m_font;
     };
 
@@ -79,7 +79,7 @@ public:
     std::vector<FontChange> m_font_changes;
     Font::Ptr m_default_font;
 
-    bool find_font(const RawFont& raw_font, t_size& index);
+    bool find_font(const RawFont& raw_font, size_t& index);
 
     void reset(bool keep_handles = false);
 };
@@ -94,7 +94,7 @@ DisplayInfo g_get_multiline_text_dimensions(HDC dc, std::wstring_view text, cons
 
 std::wstring g_get_text_line_lengths(const wchar_t* text, LineLengths& line_lengths);
 
-void g_parse_font_format_string(const wchar_t* str, t_size len, RawFont& p_out);
+void g_parse_font_format_string(const wchar_t* str, size_t len, RawFont& p_out);
 std::wstring g_get_raw_font_changes(const wchar_t* formatted_text, RawFontChanges& p_out);
 void g_get_font_changes(const RawFontChanges& raw_font_changes, FontChanges& font_changes);
 
@@ -104,51 +104,31 @@ void g_text_out_multiline_font(HDC dc, RECT rc_placement, const wchar_t* text, c
 class TitleformatHookChangeFont : public titleformat_hook {
 public:
     bool process_field(
-        titleformat_text_out* p_out, const char* p_name, unsigned p_name_length, bool& p_found_flag) override;
+        titleformat_text_out* p_out, const char* p_name, size_t p_name_length, bool& p_found_flag) override;
 
-    bool process_function(titleformat_text_out* p_out, const char* p_name, unsigned p_name_length,
+    bool process_function(titleformat_text_out* p_out, const char* p_name, size_t p_name_length,
         titleformat_hook_function_params* p_params, bool& p_found_flag) override;
 
-    TitleformatHookChangeFont(const LOGFONT& lf);
+    explicit TitleformatHookChangeFont(const LOGFONT& lf);
 
 private:
     pfc::string8 m_default_font_face;
-    t_size m_default_font_size;
-};
-
-class FontCodeGenerator {
-    class StringFontCode : private pfc::string8_fast_aggressive {
-    public:
-        operator const char*() const;
-        StringFontCode(const LOGFONT& lf);
-    };
-
-public:
-    void run(HWND parent, UINT edit);
-    void initialise(const LOGFONT& p_lf_default, HWND parent, UINT edit);
-
-private:
-    LOGFONT m_lf{};
+    size_t m_default_font_size;
 };
 
 class ItemDetails
-    : public uie::container_ui_extension
+    : public uie::container_uie_window_v3
     , public ui_selection_callback
     , public play_callback
     , public playlist_callback_single
     , public metadb_io_callback_dynamic {
-    class MessageWindow : public container_window {
-        class_data& get_class_data() const override;
-        LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
-    };
-
-    static MessageWindow g_message_window;
+    inline static std::unique_ptr<uie::container_window_v3> s_message_window;
 
     enum {
         MSG_REFRESH = WM_USER + 2,
     };
 
-    class_data& get_class_data() const override;
+    uie::container_window_v3_config get_window_config() override;
 
 public:
     enum TrackingMode {
@@ -159,24 +139,24 @@ public:
         track_selection,
     };
 
-    bool g_track_mode_includes_now_playing(t_size mode);
+    bool g_track_mode_includes_now_playing(size_t mode);
 
-    bool g_track_mode_includes_plalist(t_size mode);
+    bool g_track_mode_includes_plalist(size_t mode);
 
-    bool g_track_mode_includes_auto(t_size mode);
+    bool g_track_mode_includes_auto(size_t mode);
 
-    bool g_track_mode_includes_selection(t_size mode);
+    bool g_track_mode_includes_selection(size_t mode);
 
     class MenuNodeTrackMode : public ui_extension::menu_node_command_t {
         service_ptr_t<ItemDetails> p_this;
-        t_size m_source;
+        uint32_t m_source;
 
     public:
-        static const char* get_name(t_size source);
+        static const char* get_name(uint32_t source);
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeTrackMode(ItemDetails* p_wnd, t_size p_value);
+        MenuNodeTrackMode(ItemDetails* p_wnd, uint32_t p_value);
     };
 
     class MenuNodeSourcePopup : public ui_extension::menu_node_popup_t {
@@ -184,21 +164,21 @@ public:
 
     public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
-        unsigned get_children_count() const override;
-        void get_child(unsigned p_index, uie::menu_node_ptr& p_out) const override;
-        MenuNodeSourcePopup(ItemDetails* p_wnd);
+        size_t get_children_count() const override;
+        void get_child(size_t p_index, uie::menu_node_ptr& p_out) const override;
+        explicit MenuNodeSourcePopup(ItemDetails* p_wnd);
     };
 
     class MenuNodeAlignment : public ui_extension::menu_node_command_t {
         service_ptr_t<ItemDetails> p_this;
-        t_size m_type;
+        uint32_t m_type;
 
     public:
-        static const char* get_name(t_size source);
+        static const char* get_name(uint32_t source);
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeAlignment(ItemDetails* p_wnd, t_size p_value);
+        MenuNodeAlignment(ItemDetails* p_wnd, uint32_t p_value);
     };
 
     class MenuNodeAlignmentPopup : public ui_extension::menu_node_popup_t {
@@ -206,9 +186,9 @@ public:
 
     public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
-        unsigned get_children_count() const override;
-        void get_child(unsigned p_index, uie::menu_node_ptr& p_out) const override;
-        MenuNodeAlignmentPopup(ItemDetails* p_wnd);
+        size_t get_children_count() const override;
+        void get_child(size_t p_index, uie::menu_node_ptr& p_out) const override;
+        explicit MenuNodeAlignmentPopup(ItemDetails* p_wnd);
     };
 
     class MenuNodeOptions : public ui_extension::menu_node_command_t {
@@ -218,7 +198,7 @@ public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeOptions(ItemDetails* p_wnd);
+        explicit MenuNodeOptions(ItemDetails* p_wnd);
     };
     class MenuNodeHorizontalScrolling : public ui_extension::menu_node_command_t {
         service_ptr_t<ItemDetails> p_this;
@@ -227,7 +207,7 @@ public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeHorizontalScrolling(ItemDetails* p_wnd);
+        explicit MenuNodeHorizontalScrolling(ItemDetails* p_wnd);
     };
 
     class MenuNodeWordWrap : public ui_extension::menu_node_command_t {
@@ -237,7 +217,7 @@ public:
         bool get_display_data(pfc::string_base& p_out, unsigned& p_displayflags) const override;
         bool get_description(pfc::string_base& p_out) const override;
         void execute() override;
-        MenuNodeWordWrap(ItemDetails* p_wnd);
+        explicit MenuNodeWordWrap(ItemDetails* p_wnd);
     };
 
     // UIE funcs
@@ -247,7 +227,7 @@ public:
     unsigned get_type() const override;
 
     enum { stream_version_current = 2 };
-    void set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort) override;
+    void set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort) override;
     void get_config(stream_writer* p_writer, abort_callback& p_abort) const override;
     bool have_config_popup() const override;
     bool show_config_popup(HWND wnd_parent) override;
@@ -272,25 +252,25 @@ public:
     // PL
     enum { playlist_callback_flags = flag_on_items_selection_change | flag_on_playlist_switch };
     void on_playlist_switch() override;
-    void on_item_focus_change(t_size p_from, t_size p_to) override;
+    void on_item_focus_change(size_t p_from, size_t p_to) override;
 
     void on_items_added(
-        t_size p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override;
-    void on_items_reordered(const t_size* p_order, t_size p_count) override;
-    void on_items_removing(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override;
-    void on_items_removed(const bit_array& p_mask, t_size p_old_count, t_size p_new_count) override;
+        size_t p_base, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) override;
+    void on_items_reordered(const size_t* p_order, size_t p_count) override;
+    void on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override;
+    void on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override;
     void on_items_selection_change(const bit_array& p_affected, const bit_array& p_state) override;
     void on_items_modified(const bit_array& p_mask) override;
     void on_items_modified_fromplayback(const bit_array& p_mask, play_control::t_display_level p_level) override;
     void on_items_replaced(const bit_array& p_mask,
         const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data) override;
-    void on_item_ensure_visible(t_size p_idx) override;
+    void on_item_ensure_visible(size_t p_idx) override;
 
-    void on_playlist_renamed(const char* p_new_name, t_size p_new_name_len) override;
+    void on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) override;
     void on_playlist_locked(bool p_locked) override;
 
     void on_default_format_changed() override;
-    void on_playback_order_changed(t_size p_new_index) override;
+    void on_playback_order_changed(size_t p_new_index) override;
 
     // ML
     void on_changed_sorted(metadb_handle_list_cref p_items_sorted, bool p_fromhook) override;
@@ -300,10 +280,10 @@ public:
     static void s_on_dark_mode_status_change();
     static void g_on_colours_change();
 
-    void set_horizontal_alignment(t_size horizontal_alignment);
-    void set_vertical_alignment(t_size vertical_alignment);
+    void set_horizontal_alignment(uint32_t horizontal_alignment);
+    void set_vertical_alignment(uint32_t vertical_alignment);
 
-    void set_edge_style(t_size edge_style);
+    void set_edge_style(uint32_t edge_style);
 
     void on_edge_style_change();
 
@@ -314,6 +294,9 @@ public:
     ItemDetails();
 
 private:
+    static void s_create_message_window();
+    static void s_destroy_message_window();
+
     LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
 
     void register_callback();
@@ -350,7 +333,7 @@ private:
     void update_scrollbars(bool reset_vertical_position, bool reset_horizontal_position);
 
     void on_size();
-    void on_size(t_size cx, t_size cy);
+    void on_size(size_t cx, size_t cy);
 
     void on_font_change();
     void on_colours_change();
@@ -368,7 +351,7 @@ private:
     bool m_full_file_info_requested{};
     bool m_callback_registered{false};
     bool m_nowplaying_active{false};
-    t_size m_tracking_mode;
+    uint32_t m_tracking_mode;
 
     bool m_font_change_info_valid{false};
     FontChanges m_font_changes;
@@ -386,9 +369,9 @@ private:
     std::wstring m_current_display_text;
     titleformat_object::ptr m_to;
 
-    t_size m_horizontal_alignment;
-    t_size m_vertical_alignment;
-    t_size m_edge_style;
+    uint32_t m_horizontal_alignment;
+    uint32_t m_vertical_alignment;
+    uint32_t m_edge_style;
     bool m_hscroll;
     bool m_word_wrapping;
 
@@ -401,7 +384,7 @@ public:
     uint32_t m_edge_style{};
     uint32_t m_horizontal_alignment{};
     uint32_t m_vertical_alignment{};
-    FontCodeGenerator m_font_code_generator;
+    LOGFONT m_code_generator_selected_font{};
     bool m_modal{};
     bool m_timer_active{};
     service_ptr_t<ItemDetails> m_this;
@@ -421,7 +404,7 @@ private:
     void kill_timer();
     void start_timer();
     void on_timer();
-    BOOL CALLBACK on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
+    INT_PTR CALLBACK on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
 };
 
 } // namespace cui::panels::item_details

@@ -1,15 +1,6 @@
 #pragma once
 
-/*!
- * \file rebar.h
- *
- * \author musicmusic
- * \date 1 March 2015
- *
- * Classes used for the toolbars (rebar control) of the main window
- */
-
-#include "stdafx.h"
+#include "pch.h"
 #include "rebar_band.h"
 
 namespace cui::rebar {
@@ -42,7 +33,7 @@ private:
     BandCache entries;
 
     void get_data_raw(stream_writer* out, abort_callback& p_abort) override;
-    void set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort) override;
+    void set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort) override;
 
 public:
     explicit ConfigBandCache(const GUID& p_guid) : cfg_var(p_guid) { reset(); }
@@ -58,12 +49,12 @@ private:
     std::vector<RebarBandState> m_entries;
 
     void get_data_raw(stream_writer* out, abort_callback& p_abort) override;
-    void set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort) override;
+    void set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort) override;
 
 public:
-    void export_config(stream_writer* p_out, t_uint32 mode, fcl::t_export_feedback& feedback, abort_callback& p_abort);
+    void export_config(stream_writer* p_out, uint32_t mode, fcl::t_export_feedback& feedback, abort_callback& p_abort);
     void import_config(
-        stream_reader* p_reader, t_size size, t_uint32 mode, pfc::list_base_t<GUID>& panels, abort_callback& p_abort);
+        stream_reader* p_reader, size_t size, uint32_t mode, pfc::list_base_t<GUID>& panels, abort_callback& p_abort);
 
     explicit ConfigRebar(const GUID& p_guid) : cfg_var(p_guid) { reset(); }
 
@@ -79,9 +70,6 @@ public:
 };
 
 class RebarWindow {
-private:
-    void destroy_bands();
-
 public:
     HWND wnd_rebar{nullptr};
     BandCache cache;
@@ -107,15 +95,15 @@ public:
     void update_bands();
     void delete_band(HWND wnd, bool destroy = true);
 
-    void update_band(unsigned n, bool size = false);
+    void update_band(size_t n, bool size = false);
 
     bool check_band(const GUID& id);
-    bool find_band(const GUID& id, unsigned& out);
+    bool find_band(const GUID& id, size_t& out);
     bool delete_band(const GUID& id);
-    void delete_band(unsigned idx);
+    void delete_band(size_t idx);
 
     void on_themechanged();
-    std::optional<LRESULT> handle_custom_draw(const LPNMCUSTOMDRAW lpnmcd) const;
+    std::optional<LRESULT> handle_custom_draw(LPNMCUSTOMDRAW lpnmcd) const;
 
     bool on_menu_char(unsigned short c);
     void show_accelerators();
@@ -132,21 +120,24 @@ public:
 
     auto find_band_by_hwnd(HWND wnd)
     {
-        return std::find_if(std::begin(m_bands), std::end(m_bands), [&wnd](auto&& item) { return item.m_wnd == wnd; });
+        return std::ranges::find_if(m_bands, [&wnd](auto&& item) { return item.m_wnd == wnd; });
     }
 
 private:
+    static LRESULT WINAPI s_handle_hooked_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
+
+    LRESULT WINAPI handle_hooked_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp);
+    void destroy_bands();
+
     /**
      * For some reason, the z-order gets messed up after adding bands to the rebar control.
      * This makes sure that the z-order for bands goes from top to bottom.
      */
     void fix_z_order();
 
-    void reopen_themes();
-
+    WNDPROC m_rebar_wnd_proc{nullptr};
     std::vector<RebarBand> m_bands;
-    wil::unique_htheme m_toolbar_theme;
-    std::unique_ptr<cui::colours::dark_mode_notifier> m_dark_mode_notifier;
+    std::unique_ptr<colours::dark_mode_notifier> m_dark_mode_notifier;
 
     friend class RebarWindowHost;
 };

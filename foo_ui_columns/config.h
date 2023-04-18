@@ -1,5 +1,6 @@
 #pragma once
 
+#include "colour_manager_data.h"
 #include "columns_v2.h"
 #include "config_host.h"
 #include "font_utils.h"
@@ -31,7 +32,8 @@ PreferencesTab* g_get_tab_playlist_switcher();
 PreferencesTab* g_get_tab_playlist_tabs();
 PreferencesTab* g_get_tab_playlist_dd();
 PreferencesTab* g_get_tab_main();
-PreferencesTab* g_get_tab_status();
+PreferencesTab* g_get_tab_status_bar();
+PreferencesTab* g_get_tab_status_pane();
 PreferencesTab* g_get_tab_global();
 
 void refresh_appearance_prefs();
@@ -100,32 +102,12 @@ extern const GUID g_guid_columns_ui_preferences_page;
 
 void on_global_colours_change();
 
-cui::colours::colour_mode_t g_get_global_colour_mode();
-void g_set_global_colour_mode(cui::colours::colour_mode_t p_mode);
-
-class StringFontDesc : private pfc::string8_fast_aggressive {
-public:
-    operator const char*() const { return get_ptr(); }
-    StringFontDesc(const LOGFONT& lf)
-    {
-        prealloc(64);
-        HDC dc = GetDC(nullptr);
-        unsigned pt = -MulDiv(lf.lfHeight, 72, GetDeviceCaps(dc, LOGPIXELSY));
-        ReleaseDC(nullptr, dc);
-
-        add_string(pfc::stringcvt::string_utf8_from_wide(lf.lfFaceName, tabsize(lf.lfFaceName)));
-        add_byte(' ');
-        add_string(pfc::format_int(pt));
-        add_string("pt");
-        if (lf.lfWeight == FW_BOLD)
-            add_string(" Bold");
-        if (lf.lfItalic)
-            add_string(" Itallic");
-    }
-};
+cui::colours::ColourScheme g_get_global_colour_scheme(bool is_dark = cui::colours::is_dark_mode_active());
+void g_set_global_colour_scheme(cui::colours::ColourScheme p_mode, bool is_dark = cui::colours::is_dark_mode_active());
 
 namespace cui {
 namespace prefs {
+
 extern service_factory_single_t<PreferencesTabsHost> page_main;
 extern service_factory_single_t<PreferencesTabsHost> page_playlist_view;
 extern service_factory_single_t<PreferencesTabsHost> page_playlist_switcher;

@@ -1,15 +1,6 @@
 #pragma once
 
-/*!
- * \file gdiplus.h
- *
- * \author musicmusic
- * \date March 2015
- *
- * Contains helper functions for Gdiplus
- */
-
-#include "stdafx.h"
+#include "pch.h"
 
 #include "wic.h"
 

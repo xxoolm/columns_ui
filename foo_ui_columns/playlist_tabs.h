@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stdafx.h"
+#include "pch.h"
 
 namespace cui::panels::playlist_tabs {
 
@@ -8,11 +8,11 @@ void g_on_autohide_tabs_change();
 void g_on_multiline_tabs_change();
 void g_on_tabs_font_change();
 
-void remove_playlist_helper(t_size index);
+void remove_playlist_helper(size_t index);
 constexpr unsigned SWITCH_TIMER_ID = 670u;
 
 class PlaylistTabs
-    : public uie::container_ui_extension_t<ui_helpers::container_window, uie::splitter_window_v2>
+    : public uie::container_uie_window_v3_t<uie::splitter_window_v2>
     , public playlist_callback {
 public:
     enum : uint32_t { MSG_RESET_SIZE_LIMITS = WM_USER + 3 };
@@ -43,27 +43,6 @@ public:
         service_ptr_t<PlaylistTabs> m_this;
     };
 
-private:
-    service_ptr_t<ui_status_text_override> m_status_override;
-
-    WNDPROC tabproc{nullptr};
-
-    bool m_dragging{false};
-    unsigned m_dragging_idx{0};
-    RECT m_dragging_rect{};
-
-    bool m_playlist_switched{false};
-    bool m_switch_timer{false};
-    unsigned m_switch_playlist{0};
-    bool initialised{false};
-
-    t_int32 m_mousewheel_delta{0};
-    UINT_PTR ID_CUSTOM_BASE{NULL};
-
-    service_ptr_t<contextmenu_manager> p_manager;
-
-    class_data& get_class_data() const override;
-
 public:
     static pfc::ptr_list_t<PlaylistTabs> list_wnd;
 
@@ -85,7 +64,7 @@ public:
         HRESULT STDMETHODCALLTYPE DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
         HRESULT STDMETHODCALLTYPE DragLeave() override;
         HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override;
-        PlaylistTabsDropTarget(PlaylistTabs* p_wnd);
+        explicit PlaylistTabsDropTarget(PlaylistTabs* p_wnd);
 
     private:
         bool m_last_rmb{};
@@ -98,32 +77,30 @@ public:
     };
 
     void FB2KAPI on_items_removing(
-        unsigned p_playlist, const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count) override;
+        size_t p_playlist, const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override;
     // called before actually removing them
     void FB2KAPI on_items_removed(
-        unsigned p_playlist, const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count) override;
+        size_t p_playlist, const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override;
 
-    void on_playlist_activate(unsigned p_old, unsigned p_new) override;
+    void on_playlist_activate(size_t p_old, size_t p_new) override;
 
-    void on_playlists_reorder(const unsigned* p_order, unsigned p_count) override;
-    void on_playlist_created(unsigned p_index, const char* p_name, unsigned p_name_len) override;
-    void on_playlists_removed(const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count) override;
-    void on_playlist_renamed(unsigned p_index, const char* p_new_name, unsigned p_new_name_len) override;
+    void on_playlists_reorder(const size_t* p_order, size_t p_count) override;
+    void on_playlist_created(size_t p_index, const char* p_name, size_t p_name_len) override;
+    void on_playlists_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override;
+    void on_playlist_renamed(size_t p_index, const char* p_new_name, size_t p_new_name_len) override;
 
-    void on_items_added(
-        unsigned int, unsigned int, const pfc::list_base_const_t<metadb_handle_ptr>&, const bit_array&) override;
-    void on_items_reordered(unsigned int, const unsigned int*, unsigned int) override;
-    void on_items_selection_change(unsigned int, const bit_array&, const bit_array&) override;
-    void on_item_focus_change(unsigned int, unsigned int, unsigned int) override;
-    void on_items_modified(unsigned int, const bit_array&) override;
-    void on_items_modified_fromplayback(unsigned int, const bit_array&, play_control::t_display_level) override;
-    void on_items_replaced(
-        unsigned int, const bit_array&, const pfc::list_base_const_t<t_on_items_replaced_entry>&) override;
-    void on_item_ensure_visible(unsigned int, unsigned int) override;
-    void on_playlists_removing(const bit_array&, unsigned int, unsigned int) override;
+    void on_items_added(size_t, size_t, const pfc::list_base_const_t<metadb_handle_ptr>&, const bit_array&) override;
+    void on_items_reordered(size_t, const size_t*, size_t) override;
+    void on_items_selection_change(size_t, const bit_array&, const bit_array&) override;
+    void on_item_focus_change(size_t, size_t, size_t) override;
+    void on_items_modified(size_t, const bit_array&) override;
+    void on_items_modified_fromplayback(size_t, const bit_array&, play_control::t_display_level) override;
+    void on_items_replaced(size_t, const bit_array&, const pfc::list_base_const_t<t_on_items_replaced_entry>&) override;
+    void on_item_ensure_visible(size_t, size_t) override;
+    void on_playlists_removing(const bit_array&, size_t, size_t) override;
     void on_default_format_changed() override;
-    void on_playback_order_changed(unsigned int) override;
-    void on_playlist_locked(unsigned int, bool) override;
+    void on_playback_order_changed(size_t) override;
+    void on_playlist_locked(size_t, bool) override;
 
     void kill_switch_timer();
 
@@ -158,35 +135,58 @@ public:
     void get_supported_panels(
         const pfc::list_base_const_t<window::ptr>& p_windows, bit_array_var& p_mask_unsupported) override;
 
-    void insert_panel(unsigned index, const uie::splitter_item_t* p_item) override;
-    void remove_panel(unsigned index) override;
-    void replace_panel(unsigned index, const uie::splitter_item_t* p_item) override;
-    unsigned get_panel_count() const override;
-    unsigned get_maximum_panel_count() const override;
-    uie::splitter_item_t* get_panel(unsigned index) const override;
+    void insert_panel(size_t index, const uie::splitter_item_t* p_item) override;
+    void remove_panel(size_t index) override;
+    void replace_panel(size_t index, const uie::splitter_item_t* p_item) override;
+    size_t get_panel_count() const override;
+    size_t get_maximum_panel_count() const override;
+    uie::splitter_item_t* get_panel(size_t index) const override;
 
-    void import_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort) override;
+    void import_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort) override;
     void export_config(stream_writer* p_writer, abort_callback& p_abort) const override;
 
     void refresh_child_data(abort_callback& aborter = fb2k::noAbort) const;
-    void set_config(stream_reader* config, t_size p_size, abort_callback& p_abort) override;
+    void set_config(stream_reader* config, size_t p_size, abort_callback& p_abort) override;
     void get_config(stream_writer* out, abort_callback& p_abort) const override;
 
     void on_child_position_change();
 
 private:
+    uie::container_window_v3_config get_window_config() override { return {L"{ABB72D0D-DBF0-4bba-8C68-3357EBE07A4D}"}; }
+    void set_up_down_window_theme() const;
+
     static HFONT g_font;
 
+    service_ptr_t<ui_status_text_override> m_status_override;
+
+    WNDPROC tabproc{nullptr};
+
+    bool m_dragging{false};
+    size_t m_dragging_idx{0};
+    RECT m_dragging_rect{};
+
+    bool m_playlist_switched{false};
+    bool m_switch_timer{false};
+    unsigned m_switch_playlist{0};
+    bool initialised{false};
+
+    int32_t m_mousewheel_delta{0};
+    UINT ID_CUSTOM_BASE{NULL};
+
+    service_ptr_t<contextmenu_manager> p_manager;
+
     GUID m_child_guid{};
-    mutable pfc::array_t<t_uint8> m_child_data;
+    mutable pfc::array_t<uint8_t> m_child_data;
     service_ptr_t<WindowHost> m_host;
     ui_extension::window_ptr m_child;
     HWND m_child_wnd{nullptr};
     HWND m_host_wnd{nullptr};
+    HWND m_up_down_control_wnd{};
 
     unsigned m_child_top{0};
 
     MINMAXINFO mmi{};
+    std::unique_ptr<colours::dark_mode_notifier> m_dark_mode_notifier;
 };
 
 extern ui_extension::window_host_factory<PlaylistTabs::WindowHost> g_tab_host;

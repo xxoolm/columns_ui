@@ -4,18 +4,22 @@
  * \author musicmusic
  */
 
-#include "stdafx.h"
+#include "pch.h"
 
 #include "main_window.h"
 
+#include "config_appearance.h"
 #include "status_pane.h"
 #include "layout.h"
 #include "dark_mode.h"
+#include "icons.h"
 #include "notification_area.h"
 #include "status_bar.h"
 #include "migrate.h"
 #include "legacy_artwork_config.h"
 #include "rebar.h"
+#include "resource_utils.h"
+#include "svg.h"
 
 cui::rebar::RebarWindow* g_rebar_window = nullptr;
 LayoutWindow g_layout_window;
@@ -60,9 +64,11 @@ HWND cui::MainWindow::initialise(user_interface::HookProc_t hook)
         return nullptr;
     }
 
-    migrate::v100::migrate();
+    migrate::migrate_all();
 
     if (main_window::config_get_is_first_run()) {
+        colours::dark_mode_status.set(WI_EnumValue(colours::DarkModeStatus::UseSystemSetting));
+
         if (!cfg_layout.get_presets().get_count())
             cfg_layout.reset_presets();
     }
@@ -79,7 +85,7 @@ HWND cui::MainWindow::initialise(user_interface::HookProc_t hook)
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = main_window_class_name;
 
-    ATOM cls = RegisterClass(&wc);
+    RegisterClass(&wc);
 
     RECT rc_work{};
     SystemParametersInfo(SPI_GETWORKAREA, NULL, &rc_work, NULL);
@@ -141,7 +147,7 @@ void cui::MainWindow::shutdown()
 {
     DestroyWindow(m_wnd);
     UnregisterClass(main_window_class_name, core_api::get_my_instance());
-    status_bar::volume_popup_window.class_release();
+    status_bar::volume_popup_window.deregister_class();
     m_wnd = nullptr;
     if (g_icon)
         DestroyIcon(g_icon);
@@ -159,13 +165,12 @@ void cui::MainWindow::on_query_capability()
 void cui::MainWindow::update_title()
 {
     metadb_handle_ptr track;
-    static_api_ptr_t<play_control> play_api;
+    const auto play_api = play_control::get();
     play_api->get_now_playing(track);
     if (track.is_valid()) {
         pfc::string8 title;
         service_ptr_t<titleformat_object> to_wtitle;
-        static_api_ptr_t<titleformat_compiler>()->compile_safe(
-            to_wtitle, main_window::config_main_window_title_script.get());
+        titleformat_compiler::get()->compile_safe(to_wtitle, main_window::config_main_window_title_script.get());
         play_api->playback_format_title_ex(track, nullptr, title, to_wtitle, nullptr, play_control::display_level_all);
         set_title(title);
         track.release();
@@ -197,12 +202,16 @@ bool cui::MainWindow::update_taskbar_button_images() const
     if (!ImageList_GetIconSize(m_taskbar_button_images.get(), &cx, &cy))
         return false;
 
-    const auto icons = colours::is_dark_mode_active() ? dark_taskbar_icons : light_taskbar_icons;
-
-    for (size_t i = 0; i < std::size(light_taskbar_icons); i++) {
-        wil::unique_hicon icon(static_cast<HICON>(
-            LoadImage(core_api::get_my_instance(), MAKEINTRESOURCE(icons[i]), IMAGE_ICON, cx, cy, NULL)));
-        ImageList_ReplaceIcon(m_taskbar_button_images.get(), i, icon.get());
+    if (icons::use_svg_icon(cx, cy)) {
+        for (auto [index, icon_config] : ranges::views::enumerate(taskbar_icon_configs)) {
+            auto hbitmap = render_svg(icon_config, cx, cy);
+            ImageList_Replace(m_taskbar_button_images.get(), gsl::narrow<int>(index), hbitmap.get(), nullptr);
+        }
+    } else {
+        for (auto [index, icon_config] : ranges::views::enumerate(taskbar_icon_configs)) {
+            auto icon = load_icon(icon_config, cx, cy);
+            ImageList_ReplaceIcon(m_taskbar_button_images.get(), gsl::narrow<int>(index), icon.get());
+        }
     }
 
     return SUCCEEDED(m_taskbar_list->ThumbBarSetImageList(m_wnd, m_taskbar_button_images.get()));
@@ -211,30 +220,30 @@ bool cui::MainWindow::update_taskbar_button_images() const
 void cui::MainWindow::update_taskbar_buttons(bool update) const
 {
     if (m_wnd && m_taskbar_list) {
-        static_api_ptr_t<playback_control> play_api;
+        const auto play_api = playback_control::get();
 
         bool b_is_playing = play_api->is_playing();
         bool b_is_paused = play_api->is_paused();
 
         const WCHAR* ttips[6]
             = {L"Stop", L"Previous", (b_is_playing && !b_is_paused ? L"Pause" : L"Play"), L"Next", L"Random"};
-        INT_PTR bitmap_indices[] = {0, 1, (b_is_playing && !b_is_paused ? 2 : 3), 4, 5};
+        const UINT bitmap_indices[] = {0u, 1u, (b_is_playing && !b_is_paused ? 2u : 3u), 4u, 5u};
 
-        THUMBBUTTON tb[tabsize(bitmap_indices)]{};
+        THUMBBUTTON tb[std::size(bitmap_indices)]{};
 
-        for (size_t i = 0; i < tabsize(bitmap_indices); i++) {
+        for (size_t i = 0; i < std::size(bitmap_indices); i++) {
             tb[i].dwMask = THB_BITMAP | THB_TOOLTIP /*|THB_FLAGS*/;
-            tb[i].iId = taskbar_buttons::ID_FIRST + i;
+            tb[i].iId = gsl::narrow<uint32_t>(taskbar_buttons::ID_FIRST + i);
             tb[i].iBitmap = bitmap_indices[i];
-            wcscpy_s(tb[i].szTip, tabsize(tb[i].szTip), ttips[i]);
+            wcscpy_s(tb[i].szTip, std::size(tb[i].szTip), ttips[i]);
             // if (tb[i].iId == ID_STOP && !b_is_playing)
             //    tb[i].dwFlags |= THBF_DISABLED;
         }
 
         if (update)
-            m_taskbar_list->ThumbBarUpdateButtons(m_wnd, tabsize(tb), tb);
+            m_taskbar_list->ThumbBarUpdateButtons(m_wnd, gsl::narrow<UINT>(std::size(tb)), tb);
         else
-            m_taskbar_list->ThumbBarAddButtons(m_wnd, tabsize(tb), tb);
+            m_taskbar_list->ThumbBarAddButtons(m_wnd, gsl::narrow<UINT>(std::size(tb)), tb);
     }
 }
 
@@ -279,7 +288,7 @@ void cui::MainWindow::on_destroy()
 
 void cui::MainWindow::set_dark_mode_attributes(bool is_update) const
 {
-    if (!dark::does_os_support_dark_mode())
+    if (!m_wnd || !dark::does_os_support_dark_mode())
         return;
 
     const auto is_dark = colours::is_dark_mode_active();
@@ -291,22 +300,7 @@ void cui::MainWindow::set_dark_mode_attributes(bool is_update) const
 
     update_taskbar_button_images();
 
-    if (!IsWindowVisible(m_wnd))
-        return;
-
-    // The below is a hack to force the titlebar to redraw (nothing else works).
-    RECT rc{};
-    if (!GetWindowRect(m_wnd, &rc))
-        return;
-
-    const auto cx = RECT_CX(rc);
-    const auto cy = RECT_CY(rc);
-
-    if (cx <= 0)
-        return;
-
-    SetWindowPos(m_wnd, nullptr, 0, 0, cx - 1, cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    SetWindowPos(m_wnd, nullptr, 0, 0, cx, cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    dark::force_titlebar_redraw(m_wnd);
 }
 
 void cui::MainWindow::create_child_windows()
@@ -366,7 +360,7 @@ void cui::MainWindow::resize_child_windows()
                     rc_main_client.right - rc_main_client.left,
                     rc_main_client.bottom - rc_main_client.top - rebar_height - status_height, SWP_NOZORDER);
             if (rebar::g_rebar) {
-                RedrawWindow(rebar::g_rebar, nullptr, nullptr, RDW_INVALIDATE);
+                RedrawWindow(rebar::g_rebar, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE);
                 dwp = DeferWindowPos(dwp, rebar::g_rebar, nullptr, 0, 0, rc_main_client.right - rc_main_client.left,
                     rebar_height, SWP_NOZORDER);
             }
@@ -382,7 +376,7 @@ void cui::MainWindow::resize_child_windows()
 
 bool process_keydown(UINT msg, LPARAM lp, WPARAM wp, bool playlist, bool keyb)
 {
-    static_api_ptr_t<keyboard_shortcut_manager_v2> keyboard_api;
+    const auto keyboard_api = keyboard_shortcut_manager_v2::get();
 
     if (msg == WM_SYSKEYDOWN) {
         if (keyb && uie::window::g_process_keydown_keyboard_shortcuts(wp)) {
@@ -402,32 +396,32 @@ bool process_keydown(UINT msg, LPARAM lp, WPARAM wp, bool playlist, bool keyb)
 class MainWindowPlaylistCallback : public playlist_callback_single_static {
 public:
     void on_items_added(
-        unsigned start, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection)
+        size_t start, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection)
         override // inside any of these methods, you can call IPlaylist APIs to get exact info about what happened (but
                  // only methods that read playlist state, not those that modify it)
     {
         if (cui::main_window.get_wnd()) {
-            set_part_sizes(cui::status_bar::t_part_length);
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
         }
     }
-    void on_items_reordered(const unsigned* order, unsigned count) override {
+    void on_items_reordered(const size_t* order, size_t count) override {
     } // changes selection too; doesnt actually change set of items that are selected or
       // item having focus, just changes their order
-    void FB2KAPI on_items_removing(const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count) override {
+    void FB2KAPI on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override {
     } // called before actually removing them
-    void FB2KAPI on_items_removed(const bit_array& p_mask, unsigned p_old_count, unsigned p_new_count) override
+    void FB2KAPI on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override
     {
         if (cui::main_window.get_wnd()) {
-            set_part_sizes(cui::status_bar::t_part_length);
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
         }
     }
     void on_items_selection_change(const bit_array& affected, const bit_array& state) override
     {
         if (cui::main_window.get_wnd()) {
-            set_part_sizes(cui::status_bar::t_part_length);
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
         }
     }
-    void on_item_focus_change(unsigned from, unsigned to) override {
+    void on_item_focus_change(size_t from, size_t to) override {
     } // focus may be -1 when no item has focus; reminder: focus may also change on other callbacks
     void FB2KAPI on_items_modified(const bit_array& p_mask) override {}
     void FB2KAPI on_items_modified_fromplayback(const bit_array& p_mask, play_control::t_display_level p_level) override
@@ -437,7 +431,7 @@ public:
         const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data) override
     {
     }
-    void on_item_ensure_visible(unsigned idx) override {}
+    void on_item_ensure_visible(size_t idx) override {}
 
     void on_playlist_switch() override
     {
@@ -445,7 +439,7 @@ public:
             set_part_sizes(cui::status_bar::t_parts_all);
         }
     }
-    void on_playlist_renamed(const char* p_new_name, unsigned p_new_name_len) override {}
+    void on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) override {}
     void on_playlist_locked(bool p_locked) override
     {
         if (cui::main_window.get_wnd())
@@ -454,7 +448,7 @@ public:
     }
 
     void on_default_format_changed() override {}
-    void on_playback_order_changed(unsigned p_new_index) override {}
+    void on_playback_order_changed(size_t p_new_index) override {}
 
     unsigned get_flags() override { return flag_all; }
 };

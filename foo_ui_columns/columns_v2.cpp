@@ -1,4 +1,4 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "columns_v2.h"
 
 void PlaylistViewColumn::read(stream_reader* reader, abort_callback& abortCallback)
@@ -49,9 +49,9 @@ void PlaylistViewColumn::write_extra(stream_writer* out, abort_callback& abortCa
     out->write_lendian_t(width.dpi, abortCallback);
 }
 
-bool ColumnList::move_up(t_size idx)
+bool ColumnList::move_up(size_t idx)
 {
-    unsigned count = get_count();
+    const auto count = get_count();
     if (idx > 0 && idx < count) {
         order_helper order(count);
         order.swap(idx, idx - 1);
@@ -61,11 +61,11 @@ bool ColumnList::move_up(t_size idx)
     return false;
 }
 
-bool ColumnList::move(t_size from, t_size to)
+bool ColumnList::move(size_t from, size_t to)
 {
-    unsigned count = get_count();
-    unsigned n = from;
-    unsigned idx = to;
+    const auto count = get_count();
+    auto n = from;
+    auto idx = to;
     bool rv = false;
 
     order_helper order(count);
@@ -88,10 +88,10 @@ bool ColumnList::move(t_size from, t_size to)
     return rv;
 }
 
-bool ColumnList::move_down(t_size idx)
+bool ColumnList::move_down(size_t idx)
 {
-    unsigned count = get_count();
-    if (idx >= 0 && idx < (count - 1)) {
+    const auto count = get_count();
+    if (count > 0 && idx < count - 1) {
         order_helper order(count);
         order.swap(idx, idx + 1);
         reorder(order.get_ptr());
@@ -104,17 +104,17 @@ void ConfigColumns::get_data_raw(stream_writer* out, abort_callback& p_abort)
 {
     // if (!cfg_nohscroll) playlist_view::g_save_columns(); FIXME
 
-    t_size num = get_count();
+    size_t num = get_count();
 
-    out->write_lendian_t(num, p_abort);
+    out->write_lendian_t(gsl::narrow<uint32_t>(num), p_abort);
 
-    for (t_size n = 0; n < num; n++)
+    for (size_t n = 0; n < num; n++)
         get_item(n)->write(out, p_abort);
 
     // Extra data added in version 0.5.0
     out->write_lendian_t(static_cast<uint32_t>(ColumnStreamVersion::streamVersionCurrent), p_abort);
 
-    for (t_size n = 0; n < num; n++) {
+    for (size_t n = 0; n < num; n++) {
         stream_writer_memblock columnExtraData;
         get_item(n)->write_extra(&columnExtraData, p_abort);
         out->write_lendian_t(gsl::narrow<uint32_t>(columnExtraData.m_data.get_size()), p_abort);
@@ -122,14 +122,14 @@ void ConfigColumns::get_data_raw(stream_writer* out, abort_callback& p_abort)
     }
 }
 
-void ConfigColumns::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, abort_callback& p_abort)
+void ConfigColumns::set_data_raw(stream_reader* p_reader, size_t p_sizehint, abort_callback& p_abort)
 {
     list_t<PlaylistViewColumn::ptr> items;
     ColumnStreamVersion streamVersion = ColumnStreamVersion::streamVersion0;
 
-    t_uint32 num;
+    uint32_t num;
     p_reader->read_lendian_t(num, p_abort);
-    for (t_size i = 0; i < num; i++) {
+    for (size_t i = 0; i < num; i++) {
         PlaylistViewColumn::ptr item = std::make_shared<PlaylistViewColumn>();
         item->read(p_reader, p_abort);
         items.add_item(item);
@@ -144,10 +144,10 @@ void ConfigColumns::set_data_raw(stream_reader* p_reader, unsigned p_sizehint, a
     }
 
     if (streamVersion >= ColumnStreamVersion::streamVersion1) {
-        for (t_size i = 0; i < num; i++) {
+        for (size_t i = 0; i < num; i++) {
             uint32_t columnExtraDataSize;
             p_reader->read_lendian_t(columnExtraDataSize, p_abort);
-            pfc::array_staticsize_t<t_uint8> columnExtraData(columnExtraDataSize);
+            pfc::array_staticsize_t<uint8_t> columnExtraData(columnExtraDataSize);
             p_reader->read(columnExtraData.get_ptr(), columnExtraData.get_size(), p_abort);
             stream_reader_memblock_ref columnReader(columnExtraData);
             items[i]->read_extra(&columnReader, streamVersion, p_abort);

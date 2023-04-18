@@ -1,5 +1,8 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "fcl.h"
+
+#include "core_dark_list_view.h"
+#include "dark_mode_dialog.h"
 #include "main_window.h"
 
 // {EBD87879-65A7-4242-821B-812AF9F68E8F}
@@ -46,8 +49,8 @@ public:
     void g_populate_tree(HWND wnd_tree, cui::fcl::group_list& list, const cui::fcl::group_list_filtered& filtered,
         HTREEITEM ti_parent = TVI_ROOT)
     {
-        t_size count = filtered.get_count();
-        for (t_size i = 0; i < count; i++) {
+        size_t count = filtered.get_count();
+        for (size_t i = 0; i < count; i++) {
             pfc::string8 name;
             filtered[i]->get_name(name);
             HTREEITEM item = treeview::insert_item(wnd_tree, name, m_nodes.size(), ti_parent);
@@ -59,17 +62,21 @@ public:
         }
     }
 
-    BOOL CALLBACK FCLDialogProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+    INT_PTR CALLBACK FCLDialogProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     {
         switch (msg) {
         case WM_INITDIALOG: {
             if (m_import)
                 SetWindowText(wnd, _T("Select settings to import"));
-            HWND wnd_tree = GetDlgItem(wnd, IDC_TREE);
-            HWND wnd_combo = m_import ? nullptr : GetDlgItem(wnd, IDC_DEST);
-            SetWindowLongPtr(wnd_tree, GWL_STYLE, GetWindowLongPtr(wnd_tree, GWL_STYLE) | TVS_CHECKBOXES);
 
-            uih::tree_view_set_explorer_theme(wnd_tree);
+            const HWND wnd_tree = GetDlgItem(wnd, IDC_TREE);
+
+            const auto current_styles = GetWindowLongPtr(wnd_tree, GWL_STYLE);
+            SetWindowLongPtr(wnd_tree, GWL_STYLE, current_styles | TVS_CHECKBOXES);
+
+            TreeView_SetExtendedStyle(wnd_tree, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+
+            const HWND wnd_combo = m_import ? nullptr : GetDlgItem(wnd, IDC_DEST);
 
             if (wnd_combo) {
                 ComboBox_AddString(wnd_combo, L"Any foobar2000 installation");
@@ -84,8 +91,8 @@ public:
             if (m_import) {
                 cui::fcl::dataset_list datasets;
                 std::unordered_set<GUID> groupslist;
-                t_size count = datasets.get_count();
-                for (t_size j = 0; j < count; j++) {
+                size_t count = datasets.get_count();
+                for (size_t j = 0; j < count; j++) {
                     if (m_filter.count(datasets[j]->get_guid()) > 0) {
                         GUID guid = datasets[j]->get_group();
                         groupslist.emplace(guid);
@@ -99,7 +106,7 @@ public:
                         }
                     }
                 }
-                t_size i = m_groups.get_count();
+                size_t i = m_groups.get_count();
                 for (; i; i--)
                     if (groupslist.count(m_groups[i - 1]->get_guid()) == 0)
                         m_groups.remove_by_idx(i - 1);
@@ -116,8 +123,8 @@ public:
             switch (wp) {
             case IDOK: {
                 HWND wnd_tree = GetDlgItem(wnd, IDC_TREE);
-                t_size count = m_nodes.size();
-                for (t_size i = 0; i < count; i++) {
+                size_t count = m_nodes.size();
+                for (size_t i = 0; i < count; i++) {
                     m_nodes[i].checked = 0 != TreeView_GetCheckState(wnd_tree, m_nodes[i].item);
                 }
                 HWND wnd_combo = m_import ? nullptr : GetDlgItem(wnd, IDC_DEST);
@@ -150,22 +157,22 @@ public:
     }
     bool have_node_checked(const GUID& pguid)
     {
-        t_size count = m_nodes.size();
-        for (t_size i = 0; i < count; i++) {
+        size_t count = m_nodes.size();
+        for (size_t i = 0; i < count; i++) {
             if (m_nodes[i].group->get_guid() == pguid)
                 return m_nodes[i].checked;
         }
         return false;
     }
-    t_uint32 get_mode() const { return m_mode; }
-    FCLDialog(bool b_import = false, std::unordered_set<GUID> p_list = {})
+    uint32_t get_mode() const { return m_mode; }
+    explicit FCLDialog(bool b_import = false, std::unordered_set<GUID> p_list = {})
         : m_import(b_import)
         , m_filter(std::move(p_list))
     {
     }
 
 private:
-    t_uint32 m_mode{0};
+    uint32_t m_mode{0};
     bool m_import;
     std::unordered_set<GUID> m_filter;
 };
@@ -186,8 +193,8 @@ class PanelInfoList : public pfc::list_t<PanelInfo> {
 public:
     bool get_name_by_guid(const GUID& guid, pfc::string8& p_out)
     {
-        t_size count = get_count();
-        for (t_size i = 0; i < count; i++)
+        size_t count = get_count();
+        for (size_t i = 0; i < count; i++)
             if (get_item(i).guid == guid) {
                 p_out = get_item(i).name;
                 return true;
@@ -196,64 +203,64 @@ public:
     }
 };
 
-class ImportResultsData {
+class ImportResultsDialog {
 public:
-    PanelInfoList m_items;
-    bool m_aborted;
-    ImportResultsData(PanelInfoList items, bool baborted) : m_items(std::move(items)), m_aborted(baborted) {}
-};
+    ImportResultsDialog(PanelInfoList items, bool aborted) : m_items(std::move(items)), m_aborted(aborted) {}
 
-BOOL g_ImportResultsProc(const ImportResultsData& data, HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_INITDIALOG: {
-        modeless_dialog_manager::g_add(wnd);
-        SetWindowText(wnd, _T("FCL import results"));
-        HWND wnd_lv = GetDlgItem(wnd, IDC_LIST);
-        uih::list_view_set_explorer_theme(wnd_lv);
-
-        SetWindowText(GetDlgItem(wnd, IDC_CAPTION),
-            (data.m_aborted
-                    ? _T("The layout import was aborted because the following required panels are not installed:")
-                    : _T("Some parts of the layout may not have imported because the following panels are not ")
-                      _T("installed:")));
-
-        LVCOLUMN lvc{};
-        lvc.mask = LVCF_TEXT | LVCF_WIDTH;
-
-        uih::list_view_insert_column_text(wnd_lv, 0, _T("Name"), 150);
-        uih::list_view_insert_column_text(wnd_lv, 1, _T("GUID"), 300);
-
-        SendMessage(wnd_lv, WM_SETREDRAW, FALSE, 0);
-
-        LVITEM lvi{};
-        lvi.mask = LVIF_TEXT;
-        t_size count = data.m_items.get_count();
-        for (t_size i = 0; i < count; i++) {
-            pfc::string8 temp;
-            uih::list_view_insert_item_text(wnd_lv, i, 0, data.m_items[i].name, false);
-            uih::list_view_insert_item_text(wnd_lv, i, 1, pfc::print_guid(data.m_items[i].guid), true);
-        }
-        SendMessage(wnd_lv, WM_SETREDRAW, TRUE, 0);
-        RedrawWindow(wnd_lv, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
-    } break;
-    case WM_COMMAND:
-        switch (wp) {
-        case IDCANCEL:
-            DestroyWindow(wnd);
-            return 0;
-        }
-        break;
-    case WM_CLOSE:
-        DestroyWindow(wnd);
-        return 0;
-    case WM_NCDESTROY:
-        modeless_dialog_manager::g_remove(wnd);
-        break;
+    static HWND s_open(HWND parent_wnd, PanelInfoList items, bool aborted)
+    {
+        auto dialog = std::make_shared<ImportResultsDialog>(std::move(items), aborted);
+        const cui::dark::DialogDarkModeConfig dark_mode_config{.button_ids = {IDOK}};
+        const auto wnd = modeless_dialog_box(IDD_RESULTS, dark_mode_config, parent_wnd,
+            [dialog](auto&&... args) { return dialog->handle_dialog_message(std::forward<decltype(args)>(args)...); });
+        ShowWindow(wnd, SW_SHOWNORMAL);
+        return wnd;
     }
 
-    return FALSE;
-}
+private:
+    BOOL handle_dialog_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
+    {
+        switch (msg) {
+        case WM_INITDIALOG: {
+            modeless_dialog_manager::g_add(wnd);
+            SetWindowText(wnd, L"FCL import results");
+            SetWindowText(GetDlgItem(wnd, IDC_CAPTION),
+                m_aborted ? L"The layout import was aborted because the following required panels are not installed:"
+                          : L"Some parts of the layout may not have imported because the following panels are not "
+                            L"installed:");
+
+            m_list_view.create(wnd, {7, 21, 443, 192}, true);
+            m_list_view.set_columns({{"Name", 200_spx}, {"GUID", 300_spx}});
+
+            const auto items = ranges::views::transform(m_items, [](auto&& item) {
+                return uih::ListView::InsertItem{{item.name, pfc::print_guid(item.guid)}, {}};
+            }) | ranges::to_vector;
+
+            m_list_view.insert_items(0, items.size(), items.data());
+            ShowWindow(m_list_view.get_wnd(), SW_SHOWNORMAL);
+        } break;
+        case WM_COMMAND:
+            switch (wp) {
+            case IDOK:
+                DestroyWindow(wnd);
+                return 0;
+            }
+            break;
+        case WM_CLOSE:
+            DestroyWindow(wnd);
+            return 0;
+        case WM_NCDESTROY:
+            modeless_dialog_manager::g_remove(wnd);
+            break;
+        }
+
+        return FALSE;
+    }
+
+    PanelInfoList m_items;
+    bool m_aborted{};
+    cui::helpers::CoreDarkListView m_list_view{true};
+};
 
 PFC_DECLARE_EXCEPTION(exception_fcl_dependentpanelmissing, pfc::exception, "Missing dependent panel(s)")
 
@@ -272,28 +279,27 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
         class RawDataSet {
         public:
             GUID guid{};
-            pfc::array_t<t_uint8> data;
+            pfc::array_t<uint8_t> data;
         };
 
         service_ptr_t<file> p_file;
         abort_callback_impl p_abort;
         filesystem::g_open_read(p_file, path, p_abort);
         GUID guid;
-        t_uint32 version;
+        uint32_t version;
         p_file->read_lendian_t(guid, p_abort);
         if (guid != g_fcl_header)
             throw pfc::exception("Unrecognised file header");
         p_file->read_lendian_t(version, p_abort);
         if (version > fcl_stream_version)
             throw pfc::exception("Need a newer version of Columns UI");
-        t_uint32 mode = cui::fcl::type_public;
+        uint32_t mode = cui::fcl::type_public;
         if (version >= 1)
             p_file->read_lendian_t(mode, p_abort);
         {
             pfc::list_t<bool> mask;
-            t_size count;
-            p_file->read_lendian_t(count, p_abort);
-            for (t_size i = 0; i < count; i++) {
+            const auto count = p_file->read_lendian_t<uint32_t>(p_abort);
+            for (size_t i = 0; i < count; i++) {
                 PanelInfo info;
                 p_file->read_lendian_t(info.guid, p_abort);
                 p_file->read_string(info.name, p_abort);
@@ -305,12 +311,12 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
             panel_info.remove_mask(mask.get_ptr());
         }
         {
-            t_size count = panel_info.get_count();
+            size_t count = panel_info.get_count();
             if (count) {
                 throw exception_fcl_dependentpanelmissing();
                 /*pfc::string8 msg, name;
                 msg << "Import aborted: The following required panels are not present.\r\n\r\nGUID, Name\r\n";
-                t_size i, count = panel_info.get_count();
+                size_t i, count = panel_info.get_count();
                 for (i=0; i<count; i++)
                 {
                     msg << pfc::print_guid(panel_info[i].guid);
@@ -322,10 +328,9 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
             }
         }
         {
-            t_size count;
-            p_file->read_lendian_t(count, p_abort);
+            const auto count = p_file->read_lendian_t<uint32_t>(p_abort);
 
-            pfc::array_t<pfc::array_t<t_uint32>> panel_indices;
+            pfc::array_t<pfc::array_t<uint32_t>> panel_indices;
             panel_indices.set_count(count);
 
             std::vector<RawDataSet> datasets;
@@ -336,14 +341,13 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
                 pfc::string8 name;
                 p_file->read_lendian_t(datasets[i].guid, p_abort);
                 p_file->read_string(name, p_abort);
-                t_uint32 pcount;
+                uint32_t pcount;
                 p_file->read_lendian_t(pcount, p_abort);
                 panel_indices[i].set_count(pcount);
-                for (t_uint32 j = 0; j < pcount; j++)
+                for (uint32_t j = 0; j < pcount; j++)
                     p_file->read_lendian_t(panel_indices[i][j], p_abort);
-                // pfc::array_t<t_uint8> data;
-                t_size size;
-                p_file->read_lendian_t(size, p_abort);
+                // pfc::array_t<uint8_t> data;
+                const auto size = p_file->read_lendian_t<uint32_t>(p_abort);
                 datasets[i].data.set_size(size);
                 p_file->read(datasets[i].data.get_ptr(), size, p_abort);
             }
@@ -354,9 +358,13 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
 
             FCLDialog pFCLDialog(true, std::move(datasetsguids));
             if (!quiet) {
-                const auto dialog_result = uih::modal_dialog_box(IDD_FCL_IMPORT, wnd, [&pFCLDialog](auto&&... args) {
-                    return pFCLDialog.FCLDialogProc(std::forward<decltype(args)>(args)...);
-                });
+                const cui::dark::DialogDarkModeConfig dark_mode_config{
+                    .button_ids = {IDOK, IDCANCEL}, .tree_view_ids = {IDC_TREE}};
+
+                const auto dialog_result
+                    = modal_dialog_box(IDD_FCL_IMPORT, dark_mode_config, wnd, [&pFCLDialog](auto&&... args) {
+                          return pFCLDialog.FCLDialogProc(std::forward<decltype(args)>(args)...);
+                      });
 
                 if (dialog_result <= 0)
                     throw exception_aborted();
@@ -365,7 +373,11 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
             cui::fcl::dataset_list export_items;
             ImportFeedbackReceiver feed;
 
-            uih::DisableRedrawScope p_NoRedraw(cui::main_window.get_wnd());
+            const auto old_is_dark = cui::colours::is_dark_mode_active();
+            std::unique_ptr<uih::DisableRedrawScope> disable_redraw;
+
+            if (cui::main_window.get_wnd())
+                disable_redraw = std::make_unique<uih::DisableRedrawScope>(cui::main_window.get_wnd());
 
             for (auto export_item_index : ranges::views::iota(size_t{0}, export_items.get_count())) {
                 auto ptr = export_items[export_item_index];
@@ -377,17 +389,19 @@ void g_import_layout(HWND wnd, const char* path, bool quiet)
                         data_set_iter->data.get_ptr(), data_set_iter->data.get_size(), mode, feed, p_abort);
                 }
             }
+            const auto new_is_dark = cui::colours::is_dark_mode_active();
+            disable_redraw.reset();
+
+            if (old_is_dark != new_is_dark)
+                cui::main_window.set_dark_mode_attributes(true);
+
             if (feed.get_count()) {
                 throw pfc::exception("Bug check: panels missing");
             }
         }
     } catch (const exception_aborted&) {
     } catch (const exception_fcl_dependentpanelmissing&) {
-        ImportResultsData data(panel_info, true);
-        const auto wnd_results = uih::modeless_dialog_box(IDD_RESULTS, wnd, [data{std::move(data)}](auto&&... args) {
-            return g_ImportResultsProc(data, std::forward<decltype(args)>(args)...);
-        });
-        ShowWindow(wnd_results, SW_SHOWNORMAL);
+        ImportResultsDialog::s_open(wnd, panel_info, true);
     } catch (const pfc::exception& ex) {
         popup_message::g_show(ex.what(), "Error");
     }
@@ -407,9 +421,9 @@ class ExportFeedbackReceiver
     , public pfc::list_t<GUID> {
 public:
     void add_required_panels(const list_base_const_t<GUID>& panels) override { add_items(panels); }
-    t_size find_or_add_guid(const GUID& guid)
+    size_t find_or_add_guid(const GUID& guid)
     {
-        t_size index = find_item(guid);
+        size_t index = find_item(guid);
         if (index == pfc_infinite)
             index = add_item(guid);
         return index;
@@ -420,7 +434,10 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
 {
     FCLDialog pFCLDialog;
     if (!is_quiet) {
-        const auto dialog_result = uih::modal_dialog_box(IDD_FCL_EXPORT, wnd,
+        const cui::dark::DialogDarkModeConfig dark_mode_config{
+            .button_ids = {IDOK, IDCANCEL}, .combo_box_ids = {IDC_DEST}, .tree_view_ids = {IDC_TREE}};
+
+        const auto dialog_result = modal_dialog_box(IDD_FCL_EXPORT, dark_mode_config, wnd,
             [&pFCLDialog](auto&&... args) { return pFCLDialog.FCLDialogProc(std::forward<decltype(args)>(args)...); });
 
         if (dialog_result <= 0)
@@ -439,8 +456,8 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
     pfc::list_t<GUID> groups;
 
     if (!is_quiet) {
-        const t_size count = pFCLDialog.m_nodes.size();
-        for (t_size i = 0; i < count; i++)
+        const size_t count = pFCLDialog.m_nodes.size();
+        for (size_t i = 0; i < count; i++)
             if (pFCLDialog.m_nodes[i].checked)
                 groups.add_item(pFCLDialog.m_nodes[i].group->get_guid());
     }
@@ -450,19 +467,19 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
         abort_callback_impl p_abort;
         filesystem::g_open_write_new(p_file, path, p_abort);
         p_file->write_lendian_t(g_fcl_header, p_abort);
-        p_file->write_lendian_t((t_uint32)fcl_stream_version, p_abort);
+        p_file->write_lendian_t((uint32_t)fcl_stream_version, p_abort);
 
         const uint32_t mode = is_quiet ? cui::fcl::type_private : pFCLDialog.get_mode();
         p_file->write_lendian_t(mode, p_abort);
 
         stream_writer_memblock mem;
-        t_size actualtotal = 0;
+        size_t actualtotal = 0;
         {
             cui::fcl::dataset_list export_items;
-            t_size count = export_items.get_count();
+            size_t count = export_items.get_count();
             pfc::array_t<ExportFeedbackReceiver> feeds;
             feeds.set_count(count);
-            for (t_size i = 0; i < count; i++) {
+            for (size_t i = 0; i < count; i++) {
                 if (is_quiet || groups.have_item(export_items[i]->get_group())) {
                     pfc::string8 name;
                     export_items[i]->get_name(name);
@@ -470,13 +487,13 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
                     mem.write_string(name, p_abort);
                     stream_writer_memblock writer;
                     export_items[i]->get_data(&writer, mode, feeds[i], p_abort);
-                    t_size pcount = feeds[i].get_count();
+                    const auto pcount = gsl::narrow<uint32_t>(feeds[i].get_count());
                     mem.write_lendian_t(pcount, p_abort);
-                    for (t_size j = 0; j < pcount; j++) {
-                        t_uint32 temp = feedback.find_or_add_guid(feeds[i][j]);
+                    for (size_t j = 0; j < pcount; j++) {
+                        const auto temp = gsl::narrow<uint32_t>(feedback.find_or_add_guid(feeds[i][j]));
                         mem.write_lendian_t(temp, p_abort);
                     }
-                    mem.write_lendian_t((t_uint32)writer.m_data.get_size(), p_abort);
+                    mem.write_lendian_t((uint32_t)writer.m_data.get_size(), p_abort);
                     mem.write(writer.m_data.get_ptr(), writer.m_data.get_size(), p_abort);
                     actualtotal++;
                 }
@@ -484,9 +501,9 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
         }
 
         {
-            t_size pcount = feedback.get_count();
-            p_file->write_lendian_t(pcount, p_abort);
-            for (t_size j = 0; j < pcount; j++) {
+            size_t pcount = feedback.get_count();
+            p_file->write_lendian_t(gsl::narrow<uint32_t>(pcount), p_abort);
+            for (size_t j = 0; j < pcount; j++) {
                 uie::window_ptr ptr;
                 pfc::string8 name;
                 if (uie::window::create_by_guid(feedback[j], ptr))
@@ -501,7 +518,7 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
             {
                 windows.add_item(ptr);
             }
-            t_size i, count = windows.get_count();
+            size_t i, count = windows.get_count();
             p_file->write_lendian_t(count, p_abort);
             for (i=0; i<count; i++)
             {
@@ -512,7 +529,7 @@ void g_export_layout(HWND wnd, pfc::string8 path, bool is_quiet)
             }*/
         }
 
-        p_file->write_lendian_t(actualtotal, p_abort);
+        p_file->write_lendian_t(gsl::narrow<uint32_t>(actualtotal), p_abort);
         p_file->write(mem.m_data.get_ptr(), mem.m_data.get_size(), p_abort);
     } catch (const pfc::exception& ex) {
         abort_callback_impl p_abort;

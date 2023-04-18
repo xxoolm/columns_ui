@@ -2,11 +2,10 @@
 
 #include "dark_mode.h"
 #include "dark_mode_trackbar.h"
+#include "system_appearance_manager.h"
 
-template <bool b_vertical, bool b_popup, typename t_attributes, class t_base = ui_helpers::container_window>
-class VolumeBar
-    : public t_base
-    , private play_callback {
+template <bool b_vertical, bool b_popup, typename t_attributes>
+class VolumeBar : play_callback {
     class VolumeTrackBar : public uih::Trackbar {
         void get_channel_rect(RECT* rc) const override
         {
@@ -30,8 +29,9 @@ class VolumeBar
                 Trackbar::draw_channel(dc, rc);
             else {
                 const auto is_dark = cui::colours::is_dark_mode_active();
-                COLORREF cr_shadow = cui::dark::get_system_colour(COLOR_3DSHADOW, is_dark);
-                COLORREF cr_hilight = cui::dark::get_system_colour(COLOR_3DHILIGHT, is_dark);
+                const auto top_edge_colour = get_colour(cui::dark::ColourID::VolumeChannelTopEdge, is_dark);
+                const auto bottom_and_right_edge_colour
+                    = get_colour(cui::dark::ColourID::VolumeChannelBottomAndRightEdge, is_dark);
 
                 if (m_this->get_using_gdiplus()) {
                     Gdiplus::Graphics graphics(dc);
@@ -40,8 +40,8 @@ class VolumeBar
                         RECT rcdraw(*rc);
 
                         Gdiplus::Color colour_hilight, colour_shadow;
-                        colour_hilight.SetFromCOLORREF(cr_hilight);
-                        colour_shadow.SetFromCOLORREF(cr_shadow);
+                        colour_hilight.SetFromCOLORREF(bottom_and_right_edge_colour);
+                        colour_shadow.SetFromCOLORREF(top_edge_colour);
 
                         Gdiplus::Pen pen_hilight(colour_hilight);
                         Gdiplus::Pen pen_shadow(colour_shadow);
@@ -54,8 +54,8 @@ class VolumeBar
                             Gdiplus::Point{rcdraw.left - 1, rcdraw.bottom});
                     }
                 } else {
-                    HPEN pn_light = CreatePen(PS_SOLID, 1, cr_hilight);
-                    HPEN pn_shadow = CreatePen(PS_SOLID, 1, cr_shadow);
+                    HPEN pn_light = CreatePen(PS_SOLID, 1, bottom_and_right_edge_colour);
+                    HPEN pn_shadow = CreatePen(PS_SOLID, 1, top_edge_colour);
 
                     HPEN pn_old = SelectPen(dc, pn_shadow);
                     MoveToEx(dc, rc->left, rc->bottom - 1, nullptr);
@@ -72,17 +72,17 @@ class VolumeBar
                 }
             }
         }
-        VolumeBar<b_vertical, b_popup, t_attributes, t_base>* m_this;
+        VolumeBar<b_vertical, b_popup, t_attributes>* m_this;
 
     public:
-        VolumeTrackBar(VolumeBar<b_vertical, b_popup, t_attributes, t_base>* p_this) : m_this(p_this) {}
+        explicit VolumeTrackBar(VolumeBar<b_vertical, b_popup, t_attributes>* p_this) : m_this(p_this) {}
     } m_child;
 
     class VolumeTrackBarCallback : public uih::TrackbarCallback {
         void on_position_change(unsigned pos, bool b_tracking) override
         {
             const auto volume = position_to_volume(pos);
-            static_api_ptr_t<playback_control>()->set_volume(static_cast<float>(volume));
+            playback_control::get()->set_volume(static_cast<float>(volume));
         }
 
         void get_tooltip_text(unsigned pos, uih::TrackbarString& out) override
@@ -100,10 +100,10 @@ class VolumeBar
             }
             return false;
         }
-        VolumeBar<b_vertical, b_popup, t_attributes, t_base>* m_this;
+        VolumeBar<b_vertical, b_popup, t_attributes>* m_this;
 
     public:
-        VolumeTrackBarCallback(VolumeBar<b_vertical, b_popup, t_attributes, t_base>* p_this) : m_this(p_this) {}
+        explicit VolumeTrackBarCallback(VolumeBar<b_vertical, b_popup, t_attributes>* p_this) : m_this(p_this) {}
     } m_track_bar_host;
 
 public:
@@ -138,7 +138,7 @@ public:
             m_child.set_custom_colours({});
     }
 
-    LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override
+    LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     {
         switch (msg) {
         case WM_CREATE: {
@@ -157,6 +157,11 @@ public:
 
             m_dark_mode_notifier = std::make_unique<cui::colours::dark_mode_notifier>([this] { set_custom_colours(); });
 
+            m_modern_colours_changed_token = cui::system_appearance_manager::add_modern_colours_change_handler([this] {
+                if (cui::colours::is_dark_mode_active())
+                    set_custom_colours();
+            });
+
             wnd_trackbar = m_child.create(wnd);
 
             if (wnd_trackbar) {
@@ -172,7 +177,7 @@ public:
             }
             ShowWindow(wnd_trackbar, SW_SHOWNORMAL);
 
-            static_api_ptr_t<play_callback_manager>()->register_callback(this, flag_on_volume_change, false);
+            play_callback_manager::get()->register_callback(this, flag_on_volume_change, false);
 
             break;
         }
@@ -218,8 +223,8 @@ public:
             // Note: In non-pop-up mode, this is handled by uie::container_window
             RECT rect{};
             GetClientRect(wnd, &rect);
-            const auto brush = cui::dark::get_colour_brush(
-                cui::dark::ColourID::VolumePopupBackground, cui::colours::is_dark_mode_active());
+            const auto brush
+                = get_colour_brush(cui::dark::ColourID::VolumePopupBackground, cui::colours::is_dark_mode_active());
             FillRect(reinterpret_cast<HDC>(wp), &rect, brush.get());
             return TRUE;
         }
@@ -233,7 +238,7 @@ public:
                 RECT rect{};
                 GetClientRect(wnd, &rect);
 
-                const auto border_colour = cui::dark::get_colour(cui::dark::ColourID::VolumePopupBorder, is_dark);
+                const auto border_colour = get_colour(cui::dark::ColourID::VolumePopupBorder, is_dark);
                 const auto pen = wil::unique_hpen(CreatePen(PS_INSIDEFRAME, 1_spx, border_colour));
                 const auto _select_pen = wil::SelectObject(ps.hdc, pen.get());
                 const auto _select_brush = wil::SelectObject(ps.hdc, GetStockObject(NULL_BRUSH));
@@ -256,7 +261,7 @@ public:
 
                     const auto _ = wil::SelectObject(ps.hdc, m_font_caption.get());
                     uExtTextOut(ps.hdc, rc_caption.left, rc_caption.bottom, ETO_CLIPPED, &rc_caption, label_text.data(),
-                        label_text.length(), nullptr);
+                        gsl::narrow<UINT>(label_text.length()), nullptr);
                 }
             }
             return 0;
@@ -277,8 +282,9 @@ public:
             }
         } break;
         case WM_DESTROY: {
+            m_modern_colours_changed_token.reset();
             m_dark_mode_notifier.reset();
-            static_api_ptr_t<play_callback_manager>()->unregister_callback(this);
+            play_callback_manager::get()->unregister_callback(this);
             m_child.destroy();
             if (t_attributes::get_show_caption())
                 m_font_caption.reset();
@@ -293,23 +299,30 @@ public:
         return DefWindowProc(wnd, msg, wp, lp);
     }
 
-    VolumeBar() : m_child(this), m_track_bar_host(this) {}
+    VolumeBar() : m_child(this), m_track_bar_host(this)
+    {
+        uie::container_window_v3_config config(t_attributes::get_class_name(), !b_popup);
+        config.window_styles = b_popup ? WS_POPUP | WS_CLIPCHILDREN : WS_CHILD | WS_CLIPCHILDREN;
+        config.extended_window_styles = b_popup ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : WS_EX_CONTROLPARENT;
+
+        m_window = std::make_unique<uie::container_window_v3>(
+            config, [this](auto&&... args) { return on_message(std::forward<decltype(args)>(args)...); });
+    }
     VolumeBar(const VolumeBar&) = delete;
     VolumeBar& operator=(const VolumeBar&) = delete;
     VolumeBar(VolumeBar&&) = delete;
     VolumeBar& operator=(VolumeBar&&) = delete;
     ~VolumeBar() = default;
 
-    ui_helpers::container_window::class_data& get_class_data() const override
-    {
-        __implement_get_class_data_ex(t_attributes::get_class_name(), _T(""), !b_popup, 0,
-            b_popup ? WS_POPUP | WS_CLIPCHILDREN : WS_CHILD | WS_CLIPCHILDREN,
-            b_popup ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : WS_EX_CONTROLPARENT, 0);
-    }
+    HWND create(HWND parent, int x, int y, int cx, int cy) const { return m_window->create(parent, x, y, cx, cy); }
+    HWND create(HWND parent) const { return m_window->create(parent); }
+    void destroy() const { m_window->destroy(); }
+    HWND get_wnd() const { return m_window->get_wnd(); }
+    void deregister_class() const { m_window->deregister_class(); }
 
     void update_position()
     {
-        float vol = static_api_ptr_t<playback_control>()->get_volume();
+        float vol = playback_control::get()->get_volume();
         update_position(vol);
     }
     void update_position(float p_new_volume) { m_child.set_position(volume_to_position(p_new_volume)); }
@@ -318,7 +331,7 @@ public:
         if (!t_attributes::get_show_caption())
             return 0;
 
-        return gsl::narrow<int>(uGetFontHeight(fnt)) + 1_spx;
+        return uih::get_font_height(fnt) + 1_spx;
     }
     static int g_get_caption_size()
     {
@@ -335,7 +348,7 @@ private:
     {
         const auto dc = wil::GetDC(this->get_wnd());
         const auto _ = wil::SelectObject(dc.get(), m_font_caption.get());
-        return uGetTextExtentPoint32(dc.get(), label_text.data(), label_text.size(), &p_out) != 0;
+        return uGetTextExtentPoint32(dc.get(), label_text.data(), gsl::narrow<UINT>(label_text.size()), &p_out) != 0;
     }
 
     void FB2KAPI on_playback_starting(play_control::t_track_command p_command, bool p_paused) override {}
@@ -355,7 +368,9 @@ private:
     wil::unique_hfont m_font_caption;
     ULONG_PTR m_Gdiplus_token{NULL};
     bool m_using_gdiplus{false};
+    std::unique_ptr<uie::container_window_v3> m_window;
     std::unique_ptr<cui::colours::dark_mode_notifier> m_dark_mode_notifier;
+    std::unique_ptr<cui::EventToken> m_modern_colours_changed_token;
 };
 
 class PopupVolumeBarAttributes {

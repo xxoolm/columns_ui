@@ -1,17 +1,13 @@
-#include "stdafx.h"
+#include "pch.h"
 #include "buttons.h"
 
 #include "dark_mode.h"
+#include "dark_mode_dialog.h"
 #include "menu_items.h"
 
 #define ID_BUTTONS 2001
 
 namespace cui::toolbars::buttons {
-
-ButtonsToolbar::class_data& ButtonsToolbar::get_class_data() const
-{
-    __implement_get_class_data_child_ex(class_name, true, false);
-}
 
 const GUID& ButtonsToolbar::get_extension_guid() const
 {
@@ -31,18 +27,20 @@ unsigned ButtonsToolbar::get_type() const
     return ui_extension::type_toolbar;
 }
 
-void ButtonsToolbar::import_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void ButtonsToolbar::import_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     ConfigParam param;
     param.m_selection = nullptr;
-    param.m_child = nullptr;
     param.m_active = 0;
-    param.m_image = nullptr;
     param.m_text_below = m_text_below;
     param.m_appearance = m_appearance;
+    param.m_icon_size = m_icon_size;
+    param.m_width = m_width;
+    param.m_height = m_height;
     param.import_from_stream(p_reader, false, p_abort);
 
-    configure(param.m_buttons, param.m_text_below, param.m_appearance);
+    configure(
+        param.m_buttons, param.m_text_below, param.m_appearance, param.m_icon_size, param.m_width, param.m_height);
 }
 
 void ButtonsToolbar::export_config(stream_writer* p_writer, abort_callback& p_abort) const
@@ -50,16 +48,14 @@ void ButtonsToolbar::export_config(stream_writer* p_writer, abort_callback& p_ab
     ConfigParam param;
     param.m_selection = nullptr;
     param.m_buttons = m_buttons;
-    param.m_child = nullptr;
     param.m_active = 0;
-    param.m_image = nullptr;
     param.m_text_below = m_text_below;
     param.m_appearance = m_appearance;
+    param.m_icon_size = m_icon_size;
+    param.m_width = m_width;
+    param.m_height = m_height;
     param.export_to_stream(p_writer, false, p_abort);
 }
-
-// {AFD89390-8E1F-434c-B9C5-A4C1261BB792}
-const GUID ButtonsToolbar::g_guid_fcb = {0xafd89390, 0x8e1f, 0x434c, {0xb9, 0xc5, 0xa4, 0xc1, 0x26, 0x1b, 0xb7, 0x92}};
 
 void ButtonsToolbar::reset_buttons(std::vector<Button>& p_buttons)
 {
@@ -103,13 +99,11 @@ const TCHAR* ButtonsToolbar::class_name = _T("{D75D4E2D-603B-4699-9C49-64DDFFE56
 
 void ButtonsToolbar::create_toolbar()
 {
-    pfc::array_t<TBBUTTON> tbb;
-    tbb.set_size(m_buttons.size());
+    const auto is_dark = colours::is_dark_mode_active();
 
+    std::vector<TBBUTTON> tbbuttons(m_buttons.size());
     std::vector<ButtonImage> images(m_buttons.size());
     std::vector<ButtonImage> images_hot(m_buttons.size());
-
-    memset(tbb.get_ptr(), 0, tbb.get_size() * sizeof(*tbb.get_ptr()));
 
     RECT rc;
     GetClientRect(wnd_host, &rc);
@@ -127,102 +121,117 @@ void ButtonsToolbar::create_toolbar()
 
         bool b_need_hot = false;
 
-        unsigned n;
-        unsigned count = tbb.get_size();
-        for (n = 0; n < count; n++) {
-            if (m_buttons[n].m_use_custom_hot) {
+        for (auto&& button : m_buttons) {
+            if (button.m_use_custom_hot) {
                 b_need_hot = true;
                 break;
             }
         }
 
-        SIZE sz = {0, 0};
-
-        bit_array_bittable mask(count);
-
+        const bool is_custom_size = m_icon_size == IconSize::Custom;
+        int button_width{};
+        int button_height{};
         size_t image_count{};
 
-        for (n = 0; n < count; n++) {
-            if (m_buttons[n].m_type != TYPE_SEPARATOR) {
-                m_buttons[n].m_callback.set_wnd(this);
-                m_buttons[n].m_callback.set_id(n);
-                service_enum_t<ui_extension::button> e;
-                service_ptr_t<ui_extension::button> ptr;
-                while (e.next(ptr)) {
-                    if (ptr->get_item_guid() == m_buttons[n].m_guid) {
-                        m_buttons[n].m_interface = ptr;
-                        break;
-                    }
+        for (auto&& [n, button] : ranges::views::enumerate(m_buttons)) {
+            if (button.m_type == TYPE_SEPARATOR)
+                continue;
+
+            button.m_callback.set_wnd(this);
+            button.m_callback.set_id(gsl::narrow<int>(n));
+
+            for (auto enumerator = uie::button::enumerate(); !enumerator.finished(); ++enumerator) {
+                if ((*enumerator)->get_item_guid() == button.m_guid) {
+                    button.m_interface = *enumerator;
+                    break;
                 }
+            }
 
-                if (m_buttons[n].m_show == SHOW_IMAGE || m_buttons[n].m_show == SHOW_IMAGE_TEXT) {
-                    ++image_count;
+            if (button.m_show != SHOW_IMAGE && button.m_show != SHOW_IMAGE_TEXT)
+                continue;
 
-                    if (m_buttons[n].m_use_custom_hot)
-                        images_hot[n].load(m_buttons[n].m_custom_hot_image);
-                    if (!m_buttons[n].m_use_custom) {
-                        if (m_buttons[n].m_interface.is_valid()) {
-                            mask.set(n, true);
-                            // images[n].load(m_buttons[n].m_interface, colour_btntext);
-                        }
-                    } else {
-                        images[n].load(m_buttons[n].m_custom_image);
+            ++image_count;
 
-                        SIZE szt;
-                        images[n].get_size(szt);
-                        sz.cx = std::max(sz.cx, szt.cx);
-                        sz.cy = std::max(sz.cy, szt.cy);
-                    }
+            if (button.m_use_custom_hot)
+                images_hot[n].preload(button.m_custom_hot_image);
+
+            if (button.m_use_custom) {
+                images[n].preload(button.m_custom_image);
+
+                if (!is_custom_size) {
+                    const auto [image_width, image_height] = images[n].get_size().value_or(std::make_tuple(0, 0));
+                    button_width = std::max(button_width, image_width);
+                    button_height = std::max(button_height, image_height);
                 }
             }
         }
-        if (sz.cx == 0 && sz.cy == 0) {
-            sz.cx = GetSystemMetrics(SM_CXSMICON);
-            sz.cy = GetSystemMetrics(SM_CYSMICON);
-        }
-        for (n = 0; n < count; n++) {
-            if (mask[n])
-                images[n].load(m_buttons[n].m_interface, colour_btntext, sz.cx, sz.cy);
+
+        if (button_width == 0 && button_height == 0) {
+            button_width = is_custom_size ? m_width.get_scaled_value() : GetSystemMetrics(SM_CXSMICON);
+            button_height = is_custom_size ? m_height.get_scaled_value() : GetSystemMetrics(SM_CYSMICON);
         }
 
-        width = sz.cx;
-        height = sz.cy;
+        bool any_images_resized{};
+        bool any_hot_images_resized{};
+
+        for (auto&& [n, button] : ranges::views::enumerate(m_buttons)) {
+            const auto resized = images[n].load(
+                button.m_use_custom ? std::make_optional(std::ref(button.m_custom_image)) : std::nullopt,
+                button.m_interface, colour_btntext, button_width, button_height);
+
+            any_images_resized = any_images_resized || resized;
+
+            if (button.m_use_custom_hot) {
+                const auto resized_hot = images_hot[n].load(
+                    button.m_custom_hot_image, nullptr, colour_btntext, button_width, button_height);
+
+                any_hot_images_resized = any_hot_images_resized || resized_hot;
+            }
+        }
+
+        if (any_images_resized)
+            console::print(reinterpret_cast<const char*>(fmt::format(
+                u8"Buttons toolbar – resized some custom non-hot images to {} x {}px", button_width, button_height)
+                                                             .c_str()));
+
+        if (any_hot_images_resized)
+            console::print(reinterpret_cast<const char*>(fmt::format(
+                u8"Buttons toolbar – resized some custom hot images to {} x {}px", button_width, button_height)
+                                                             .c_str()));
 
         m_standard_images.reset(
-            ImageList_Create(width, height, ILC_COLOR32 | ILC_MASK, gsl::narrow<int>(image_count), 0));
+            ImageList_Create(button_width, button_height, ILC_COLOR32 | ILC_MASK, gsl::narrow<int>(image_count), 0));
         if (b_need_hot)
-            m_hot_images.reset(
-                ImageList_Create(width, height, ILC_COLOR32 | ILC_MASK, gsl::narrow<int>(image_count), 0));
+            m_hot_images.reset(ImageList_Create(
+                button_width, button_height, ILC_COLOR32 | ILC_MASK, gsl::narrow<int>(image_count), 0));
 
-        // SendMessage(wnd_toolbar, TB_ADDSTRING,  NULL, (LPARAM)_T("\0")); //Add a empty string at index 0
-
-        for (n = 0; n < count; n++) {
-            tbb[n].iString = -1; //"It works"
+        for (auto&& [n, tbbutton] : ranges::views::enumerate(tbbuttons)) {
+            tbbutton.iString = -1; //"It works"
 
             if (m_buttons[n].m_type == TYPE_SEPARATOR) {
-                tbb[n].idCommand = n;
-                tbb[n].fsState = TBSTATE_ENABLED;
-                tbb[n].fsStyle = BTNS_SEP;
+                tbbutton.idCommand = gsl::narrow<int>(n);
+                tbbutton.fsStyle = is_dark ? BTNS_BUTTON | BTNS_SHOWTEXT : BTNS_SEP;
+                tbbutton.iBitmap = I_IMAGENONE;
             } else {
                 m_buttons[n].m_callback.set_wnd(this);
-                m_buttons[n].m_callback.set_id(n);
+                m_buttons[n].m_callback.set_id(gsl::narrow<int>(n));
                 if (m_buttons[n].m_show == SHOW_IMAGE || m_buttons[n].m_show == SHOW_IMAGE_TEXT) {
-                    tbb[n].iBitmap = images[n].add_to_imagelist(m_standard_images.get());
+                    tbbutton.iBitmap = images[n].add_to_imagelist(m_standard_images.get());
                     if (!m_buttons[n].m_use_custom_hot || !images_hot[n].is_valid())
                         images[n].add_to_imagelist(m_hot_images.get());
                     else
                         images_hot[n].add_to_imagelist(m_hot_images.get());
                 } else
-                    tbb[n].iBitmap = I_IMAGENONE;
+                    tbbutton.iBitmap = I_IMAGENONE;
 
-                tbb[n].idCommand = n;
-                tbb[n].fsState = 0;
-                tbb[n].fsStyle = BTNS_AUTOSIZE | BTNS_BUTTON;
+                tbbutton.idCommand = gsl::narrow<int>(n);
+                tbbutton.fsState = 0;
+                tbbutton.fsStyle = BTNS_AUTOSIZE | BTNS_BUTTON;
                 if (!m_text_below && m_appearance != APPEARANCE_NOEDGE
                     && (m_buttons[n].m_show == SHOW_TEXT || m_buttons[n].m_show == SHOW_IMAGE_TEXT))
-                    tbb[n].fsStyle |= BTNS_SHOWTEXT;
+                    tbbutton.fsStyle |= BTNS_SHOWTEXT;
 
-                if (/*m_text_below || (tbb[n].fsStyle & BTNS_SHOWTEXT) */ m_buttons[n].m_show == SHOW_TEXT
+                if (/*m_text_below || (tbb_item.fsStyle & BTNS_SHOWTEXT) */ m_buttons[n].m_show == SHOW_TEXT
                     || m_buttons[n].m_show == SHOW_IMAGE_TEXT) {
                     const auto display_text = m_buttons[n].get_display_text();
                     pfc::stringcvt::string_os_from_utf8 str_conv(display_text.c_str());
@@ -231,80 +240,97 @@ void ButtonsToolbar::create_toolbar()
                     name.append_fromptr(str_conv.get_ptr(), str_conv.length());
                     name.append_single(0);
                     name.append_single(0);
-                    tbb[n].iString = SendMessage(wnd_toolbar, TB_ADDSTRING, NULL, (LPARAM)name.get_ptr());
+                    tbbutton.iString
+                        = SendMessage(wnd_toolbar, TB_ADDSTRING, NULL, reinterpret_cast<LPARAM>(name.get_ptr()));
                 }
 
                 if (m_buttons[n].m_interface.is_valid()) {
                     unsigned state = m_buttons[n].m_interface->get_button_state();
                     if (m_buttons[n].m_interface->get_button_type() == uie::BUTTON_TYPE_DROPDOWN_ARROW)
-                        tbb[n].fsStyle |= BTNS_DROPDOWN;
+                        tbbutton.fsStyle |= BTNS_DROPDOWN;
                     if (state & uie::BUTTON_STATE_ENABLED)
-                        tbb[n].fsState |= TBSTATE_ENABLED;
+                        tbbutton.fsState |= TBSTATE_ENABLED;
                     if (state & uie::BUTTON_STATE_PRESSED)
-                        tbb[n].fsState |= TBSTATE_PRESSED;
+                        tbbutton.fsState |= TBSTATE_PRESSED;
                     // m_buttons[n].m_interface->register_callback(m_buttons[n].m_callback);
                 } else {
-                    tbb[n].fsState |= TBSTATE_ENABLED;
+                    tbbutton.fsState |= TBSTATE_ENABLED;
                 }
             }
         }
 
-        unsigned ex_style = SendMessage(wnd_toolbar, TB_GETEXTENDEDSTYLE, 0, 0);
+        const auto ex_style = SendMessage(wnd_toolbar, TB_GETEXTENDEDSTYLE, 0, 0);
         SendMessage(wnd_toolbar, TB_SETEXTENDEDSTYLE, 0,
             ex_style | TBSTYLE_EX_DRAWDDARROWS | (!m_text_below ? TBSTYLE_EX_MIXEDBUTTONS : 0));
 
-        SendMessage(wnd_toolbar, TB_SETBITMAPSIZE, (WPARAM)0, MAKELONG(width, height));
-        // SendMessage(wnd_toolbar, TB_SETBUTTONSIZE, (WPARAM) 0, MAKELONG(width,height));
+        SendMessage(wnd_toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(button_width, button_height));
 
         // todo: custom padding
-        unsigned padding = SendMessage(wnd_toolbar, TB_GETPADDING, (WPARAM)0, 0);
+        const auto padding = SendMessage(wnd_toolbar, TB_GETPADDING, 0, 0);
+
         if (m_appearance == APPEARANCE_NOEDGE) {
-            SendMessage(wnd_toolbar, TB_SETPADDING, (WPARAM)0, MAKELPARAM(0, 0));
-            DLLVERSIONINFO2 dvi;
-            HRESULT hr = uih::get_comctl32_version(dvi);
-            if (SUCCEEDED(hr) && dvi.info1.dwMajorVersion >= 6) {
-                /*
-                HTHEME thm;
-                uxtheme_api_ptr p_uxtheme;
-                uxtheme_handle::g_create(p_uxtheme);
-                thm = p_uxtheme->OpenThemeData(wnd_toolbar, L"Toolbar");
-                MARGINS mg;
-                p_uxtheme->GetThemeMargins(thm, NULL, 1, 1, 3602, NULL, &mg);
-                p_uxtheme->CloseThemeData(thm);
-                TBMETRICS temp;
-                memset(&temp, 0, sizeof(temp));
-                temp.cbSize = sizeof(temp);
-                temp.dwMask = TBMF_BUTTONSPACING;
-                temp.cxButtonSpacing =-4;
-                temp.cyButtonSpacing=0;
-                //SendMessage(wnd_toolbar, TB_SETMETRICS, 0, (LPARAM)&temp);
-                temp.dwMask = TBMF_BUTTONSPACING|TBMF_BARPAD|TBMF_PAD;*/
-            }
+            SendMessage(wnd_toolbar, TB_SETPADDING, 0, MAKELPARAM(0, 0));
+            /*
+            HTHEME thm;
+            thm = p_uxtheme->OpenThemeData(wnd_toolbar, L"Toolbar");
+            MARGINS mg;
+            p_uxtheme->GetThemeMargins(thm, NULL, 1, 1, 3602, NULL, &mg);
+            p_uxtheme->CloseThemeData(thm);
+            TBMETRICS temp;
+            memset(&temp, 0, sizeof(temp));
+            temp.cbSize = sizeof(temp);
+            temp.dwMask = TBMF_BUTTONSPACING;
+            temp.cxButtonSpacing =-4;
+            temp.cyButtonSpacing=0;
+            //SendMessage(wnd_toolbar, TB_SETMETRICS, 0, (LPARAM)&temp);
+            temp.dwMask = TBMF_BUTTONSPACING|TBMF_BARPAD|TBMF_PAD;*/
         } else if (m_appearance == APPEARANCE_FLAT)
-            SendMessage(wnd_toolbar, TB_SETPADDING, (WPARAM)0, MAKELPARAM(5, HIWORD(padding)));
+            SendMessage(wnd_toolbar, TB_SETPADDING, 0, MAKELPARAM(5, HIWORD(padding)));
 
         if (m_standard_images)
-            SendMessage(wnd_toolbar, TB_SETIMAGELIST, (WPARAM)0, (LPARAM)m_standard_images.get());
+            SendMessage(wnd_toolbar, TB_SETIMAGELIST, 0, reinterpret_cast<LPARAM>(m_standard_images.get()));
         if (m_hot_images)
-            SendMessage(wnd_toolbar, TB_SETHOTIMAGELIST, (WPARAM)0, (LPARAM)m_hot_images.get());
+            SendMessage(wnd_toolbar, TB_SETHOTIMAGELIST, 0, reinterpret_cast<LPARAM>(m_hot_images.get()));
 
-        SendMessage(wnd_toolbar, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
+        SendMessage(wnd_toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 
-        SendMessage(wnd_toolbar, TB_ADDBUTTONS, (WPARAM)tbb.get_size(), (LPARAM)tbb.get_ptr());
+        SendMessage(wnd_toolbar, TB_ADDBUTTONS, tbbuttons.size(), reinterpret_cast<LPARAM>(tbbuttons.data()));
 
-        for (n = 0; n < count; n++)
-            if (m_buttons[n].m_interface.is_valid())
-                m_buttons[n].m_interface->register_callback(m_buttons[n].m_callback);
+        if (is_dark) {
+            for (auto&& [n, button] : ranges::views::enumerate(m_buttons)) {
+                if (button.m_type != TYPE_SEPARATOR)
+                    continue;
+
+                TBBUTTONINFO tbbi{};
+                tbbi.cbSize = sizeof(tbbi);
+                tbbi.cx = 5_spx;
+                tbbi.dwMask = TBIF_BYINDEX | TBIF_SIZE;
+                SendMessage(wnd_toolbar, TB_SETBUTTONINFO, n, reinterpret_cast<LPARAM>(&tbbi));
+            }
+        }
+
+        for (auto&& button : m_buttons) {
+            if (button.m_interface.is_valid())
+                button.m_interface->register_callback(button.m_callback);
+        }
 
         ShowWindow(wnd_toolbar, SW_SHOWNORMAL);
+
+        const auto all_buttons_without_text
+            = ranges::all_of(m_buttons, [](auto&& button) { return button.m_show == SHOW_IMAGE; });
+
+        if (all_buttons_without_text && m_appearance == APPEARANCE_NOEDGE) {
+            SendMessage(wnd_toolbar, TB_SETBUTTONSIZE, 0, MAKELONG(button_width, button_height));
+        }
+
         SendMessage(wnd_toolbar, TB_AUTOSIZE, 0, 0);
     }
 }
 
 void ButtonsToolbar::destroy_toolbar()
 {
-    t_size count = m_buttons.size();
-    for (t_size i = 0; i < count; i++)
+    size_t count = m_buttons.size();
+    for (size_t i = 0; i < count; i++)
         if (m_buttons[i].m_interface.is_valid())
             m_buttons[i].m_interface->deregister_callback(m_buttons[i].m_callback);
     DestroyWindow(wnd_toolbar);
@@ -315,7 +341,7 @@ void ButtonsToolbar::destroy_toolbar()
 
 void ButtonsToolbar::set_window_theme() const
 {
-    SetWindowTheme(wnd_toolbar, cui::colours::is_dark_mode_active() ? L"DarkMode" : nullptr, nullptr);
+    SetWindowTheme(wnd_toolbar, colours::is_dark_mode_active() ? L"DarkMode" : nullptr, nullptr);
 }
 
 LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -347,7 +373,7 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             // SendMessage(wnd_menu, TB_GETMAXSIZE, NULL, (LPARAM)&sz);
 
             RECT rc = {0, 0, 0, 0};
-            t_size count = m_buttons.size();
+            size_t count = m_buttons.size();
             int cx = lpwp->cx;
             int cy = lpwp->cy;
             int extra = 0;
@@ -377,7 +403,6 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     else if (msg == WM_USER + 2) {
         if (wnd_toolbar && wp < m_buttons.size() && m_buttons[wp].m_interface.is_valid()) {
             unsigned state = m_buttons[wp].m_interface->get_button_state();
-            unsigned tbstate = 0;
             if (state & uie::BUTTON_STATE_PRESSED) {
                 PostMessage(wnd_toolbar, TB_PRESSBUTTON, wp, MAKELONG(TRUE, 0));
             }
@@ -416,30 +441,44 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             return TBDDRET_DEFAULT;
         }
         case NM_CUSTOMDRAW: {
-            auto lptbcd = (LPNMTBCUSTOMDRAW)lp;
+            const auto lptbcd = reinterpret_cast<LPNMTBCUSTOMDRAW>(lp);
             switch ((lptbcd)->nmcd.dwDrawStage) {
             case CDDS_PREPAINT:
-                return (CDRF_NOTIFYITEMDRAW);
+                return CDRF_NOTIFYITEMDRAW;
             case CDDS_ITEMPREPAINT: {
-                if (m_appearance != APPEARANCE_NOEDGE && !m_text_below && lptbcd->nmcd.dwItemSpec >= 0
-                    && lptbcd->nmcd.dwItemSpec < m_buttons.size()
-                    && m_buttons[lptbcd->nmcd.dwItemSpec].m_show == SHOW_TEXT) {
-                    DLLVERSIONINFO2 dvi;
-                    HRESULT hr = uih::get_comctl32_version(dvi);
-                    if (SUCCEEDED(hr) && dvi.info1.dwMajorVersion >= 6)
-                        lptbcd->rcText.left
-                            -= LOWORD(SendMessage(wnd_toolbar, TB_GETPADDING, (WPARAM)0, 0)) + 2; // Hack for commctrl6
+                const auto is_dark = colours::is_dark_mode_active();
+                const auto index = lptbcd->nmcd.dwItemSpec;
+
+                if (is_dark && index < m_buttons.size() && m_buttons[index].m_type == TYPE_SEPARATOR) {
+                    const auto divider_brush = get_colour_brush(dark::ColourID::ToolbarDivider, true);
+                    const auto divider_width = uih::scale_dpi_value(1, USER_DEFAULT_SCREEN_DPI * 2);
+                    const auto& item_rect = lptbcd->nmcd.rc;
+                    RECT line_rect{};
+                    line_rect.top = item_rect.top + 1_spx;
+                    line_rect.bottom = item_rect.bottom - 1_spx;
+                    line_rect.left = item_rect.left + (RECT_CX(item_rect) - divider_width) / 2;
+                    line_rect.right = line_rect.left + divider_width;
+                    FillRect(lptbcd->nmcd.hdc, &line_rect, divider_brush.get());
                 }
+
+                if (m_appearance != APPEARANCE_NOEDGE && !m_text_below && index < m_buttons.size()
+                    && m_buttons[index].m_show == SHOW_TEXT) {
+                    // Workaround for commctrl6
+                    lptbcd->rcText.left -= LOWORD(SendMessage(wnd_toolbar, TB_GETPADDING, 0, 0)) + 2;
+                }
+
                 if (m_appearance == APPEARANCE_FLAT) {
-                    LRESULT rv = TBCDRF_NOEDGES | TBCDRF_NOOFFSET;
+                    LRESULT ret = TBCDRF_NOEDGES | TBCDRF_NOOFFSET | TBCDRF_HILITEHOTTRACK;
+
                     if (lptbcd->nmcd.uItemState & CDIS_HOT) {
-                        lptbcd->clrText = GetSysColor(COLOR_HIGHLIGHTTEXT);
-                    } else {
+                        lptbcd->clrText = get_colour(dark::ColourID::ToolbarFlatHotText, is_dark);
+                        ret |= TBCDRF_USECDCOLORS;
                     }
-                    lptbcd->clrHighlightHotTrack = GetSysColor(COLOR_HIGHLIGHT);
-                    rv |= TBCDRF_HILITEHOTTRACK;
-                    return rv;
+
+                    lptbcd->clrHighlightHotTrack = get_colour(dark::ColourID::ToolbarFlatHotBackground, is_dark);
+                    return ret;
                 }
+
                 if (m_appearance == APPEARANCE_NOEDGE) {
                     return TBCDRF_NOEDGES | TBCDRF_NOBACKGROUND;
                 }
@@ -453,7 +492,7 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             metadb_handle_list_t<pfc::alloc_fast_aggressive> data;
             switch (m_buttons[wp].m_filter) {
             case FILTER_PLAYLIST: {
-                static_api_ptr_t<playlist_manager> api;
+                const auto api = playlist_manager::get();
                 data.prealloc(api->activeplaylist_get_selection_count(pfc_infinite));
                 api->activeplaylist_get_selected_items(data);
                 caller = contextmenu_item::caller_active_playlist_selection;
@@ -465,7 +504,7 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             } break;
             case FILTER_PLAYING: {
                 metadb_handle_ptr hdle;
-                if (static_api_ptr_t<play_control>()->get_now_playing(hdle))
+                if (play_control::get()->get_now_playing(hdle))
                     data.add_item(hdle);
                 caller = contextmenu_item::caller_now_playing;
             } break;
@@ -495,10 +534,9 @@ LRESULT ButtonsToolbar::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
                 POINT pts = pt;
                 ScreenToClient(wnd_toolbar, &pt);
-                int lresult = SendMessage(wnd_toolbar, TB_HITTEST, 0, (LPARAM)&pt);
+                const auto lresult = SendMessage(wnd_toolbar, TB_HITTEST, 0, (LPARAM)&pt);
                 if (lresult >= 0 && // not a separator
-                    (unsigned)lresult < m_buttons.size() && // safety
-                    m_buttons[lresult].m_interface.is_valid())
+                    lresult < std::ssize(m_buttons) && m_buttons[lresult].m_interface.is_valid())
 
                 {
                     pfc::refcounted_object_ptr_t<ui_extension::menu_hook_impl> menu_items
@@ -533,17 +571,22 @@ void ButtonsToolbar::get_category(pfc::string_base& out) const
 
 void ButtonsToolbar::get_config(stream_writer* out, abort_callback& p_abort) const
 {
-    unsigned count = m_buttons.size();
-    out->write_lendian_t(VERSION_CURRENT, p_abort);
+    const auto count = gsl::narrow<uint32_t>(m_buttons.size());
+    out->write_lendian_t(WI_EnumValue(ConfigVersion::VERSION_CURRENT), p_abort);
     out->write_lendian_t(m_text_below, p_abort);
     out->write_lendian_t(m_appearance, p_abort);
     out->write_lendian_t(count, p_abort);
     for (unsigned n = 0; n < count; n++) {
         m_buttons[n].write(out, p_abort);
     }
+    out->write_lendian_t(WI_EnumValue(m_icon_size), p_abort);
+    out->write_lendian_t(m_width.value, p_abort);
+    out->write_lendian_t(m_width.dpi, p_abort);
+    out->write_lendian_t(m_height.value, p_abort);
+    out->write_lendian_t(m_height.dpi, p_abort);
 }
 
-void ButtonsToolbar::set_config(stream_reader* p_reader, t_size p_size, abort_callback& p_abort)
+void ButtonsToolbar::set_config(stream_reader* p_reader, size_t p_size, abort_callback& p_abort)
 {
     if (!p_size)
         return;
@@ -553,114 +596,31 @@ void ButtonsToolbar::set_config(stream_reader* p_reader, t_size p_size, abort_ca
             "uie::window::set_config() cannot be called once the window has been initialised.");
 
     ConfigVersion p_version;
-    unsigned count = m_buttons.size();
     p_reader->read_lendian_t(p_version, p_abort);
-    if (p_version <= VERSION_CURRENT) {
+    if (p_version <= ConfigVersion::VERSION_CURRENT) {
         p_reader->read_lendian_t(m_text_below, p_abort);
         p_reader->read_lendian_t(m_appearance, p_abort);
-        p_reader->read_lendian_t(count, p_abort);
+        const auto count = p_reader->read_lendian_t<uint32_t>(p_abort);
         m_buttons.clear();
         for (unsigned n = 0; n < count; n++) {
             Button temp;
             temp.read(p_version, p_reader, p_abort);
             m_buttons.emplace_back(std::move(temp));
         }
+
+        try {
+            m_icon_size = static_cast<IconSize>(p_reader->read_lendian_t<int32_t>(p_abort));
+
+            const auto width = p_reader->read_lendian_t<int32_t>(p_abort);
+            const auto width_dpi = p_reader->read_lendian_t<int32_t>(p_abort);
+            m_width.set(width, width_dpi);
+
+            const auto height = p_reader->read_lendian_t<int32_t>(p_abort);
+            const auto height_dpi = p_reader->read_lendian_t<int32_t>(p_abort);
+            m_height.set(height, height_dpi);
+        } catch (const exception_io_data_truncation&) {
+        }
     }
-}
-
-BOOL CALLBACK ButtonsToolbar::ConfigChildProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_INITDIALOG:
-        SetWindowLongPtr(wnd, DWLP_USER, lp);
-        {
-            auto* ptr = reinterpret_cast<ConfigParam*>(lp);
-
-            uSendDlgItemMessageText(wnd, IDC_IMAGE_TYPE, CB_ADDSTRING, 0, "Default");
-            uSendDlgItemMessageText(wnd, IDC_IMAGE_TYPE, CB_ADDSTRING, 0, "Custom");
-
-            SHAutoComplete(GetDlgItem(wnd, IDC_IMAGE_PATH), SHACF_FILESYSTEM);
-        }
-        return TRUE;
-    case MSG_COMMAND_CHANGE: {
-        auto* ptr = reinterpret_cast<ConfigParam*>(GetWindowLongPtr(wnd, DWLP_USER));
-        if (ptr->m_selection) {
-            bool& b_custom = (ptr->m_active ? ptr->m_selection->m_use_custom_hot : ptr->m_selection->m_use_custom);
-            bool b_enable = ptr->m_selection && ptr->m_selection->m_type != TYPE_SEPARATOR;
-            EnableWindow(GetDlgItem(wnd, IDC_IMAGE_PATH), b_enable && b_custom);
-            EnableWindow(GetDlgItem(wnd, IDC_IMAGE_TYPE), b_enable);
-            EnableWindow(GetDlgItem(wnd, IDC_BROWSE), b_enable && b_custom);
-        }
-    } break;
-    case MSG_BUTTON_CHANGE: {
-        auto* ptr = reinterpret_cast<ConfigParam*>(GetWindowLongPtr(wnd, DWLP_USER));
-        bool b_custom = ptr->m_selection
-            ? (ptr->m_active ? ptr->m_selection->m_use_custom_hot : ptr->m_selection->m_use_custom)
-            : false;
-
-        SendDlgItemMessage(wnd, IDC_IMAGE_TYPE, CB_SETCURSEL, ptr->m_selection && b_custom ? 1 : 0, 0);
-        uSendDlgItemMessageText(
-            wnd, IDC_IMAGE_PATH, WM_SETTEXT, 0, (ptr->m_selection && b_custom) ? ptr->m_image->m_path.get_ptr() : "");
-        bool b_enable = ptr->m_selection && ptr->m_selection->m_type != TYPE_SEPARATOR;
-        EnableWindow(GetDlgItem(wnd, IDC_IMAGE_PATH), b_enable && b_custom);
-        EnableWindow(GetDlgItem(wnd, IDC_IMAGE_TYPE), b_enable);
-        EnableWindow(GetDlgItem(wnd, IDC_BROWSE), b_enable && b_custom);
-        if (!b_enable) {
-            // SendDlgItemMessage(wnd, IDC_IMAGE_TYPE, CB_SETCURSEL,
-        }
-    } break;
-    case WM_COMMAND:
-        switch (wp) {
-        case (CBN_SELCHANGE << 16) | IDC_IMAGE_TYPE: {
-            auto* ptr = reinterpret_cast<ConfigParam*>(GetWindowLongPtr(wnd, DWLP_USER));
-            if (ptr->m_selection && ptr->m_image) {
-                unsigned idx = SendMessage((HWND)lp, CB_GETCURSEL, 0, 0);
-                if (idx != CB_ERR && ptr->m_selection) {
-                    bool& b_custom
-                        = (ptr->m_active ? ptr->m_selection->m_use_custom_hot : ptr->m_selection->m_use_custom);
-                    b_custom = idx == 1;
-                    EnableWindow(GetDlgItem(wnd, IDC_IMAGE_PATH), b_custom);
-                    EnableWindow(GetDlgItem(wnd, IDC_BROWSE), b_custom);
-                    uSendDlgItemMessageText(wnd, IDC_IMAGE_PATH, WM_SETTEXT, 0,
-                        (ptr->m_selection && b_custom) ? ptr->m_image->m_path.get_ptr() : "");
-                }
-            }
-        } break;
-        case (EN_CHANGE << 16) | IDC_IMAGE_PATH: {
-            auto* ptr = reinterpret_cast<ConfigParam*>(GetWindowLongPtr(wnd, DWLP_USER));
-            if (ptr->m_image) {
-                ptr->m_image->m_path = string_utf8_from_window((HWND)lp);
-            }
-        } break;
-        case IDC_BROWSE: {
-            auto* ptr = reinterpret_cast<ConfigParam*>(GetWindowLongPtr(wnd, DWLP_USER));
-            bool b_custom = ptr->m_selection
-                ? (ptr->m_active ? ptr->m_selection->m_use_custom_hot : ptr->m_selection->m_use_custom)
-                : false;
-            if (ptr->m_image && b_custom) {
-                pfc::string8 temp;
-                if (!uGetFullPathName(ptr->m_selection->m_custom_image.m_path, temp)
-                    || (uGetFileAttributes(temp) & FILE_ATTRIBUTE_DIRECTORY))
-                    temp.reset();
-
-                constexpr auto extension_mask
-                    = "Image Files (*.bmp;*.gif;*.ico;*.png;*.tiff;*.webp)|*.bmp;*.gif;*.ico;*.png;*.tiff;*.webp|All "
-                      "Files (*.*)|*.*";
-
-                if (uGetOpenFileName(wnd, extension_mask, 0, "png", "Choose image", nullptr, temp, FALSE)) {
-                    ptr->m_image->m_path = temp;
-                    uSendDlgItemMessageText(
-                        wnd, IDC_IMAGE_PATH, WM_SETTEXT, 0, (true) ? ptr->m_image->m_path.get_ptr() : "");
-                }
-            }
-        } break;
-        default:
-            return FALSE;
-        }
-    default:
-        return FALSE;
-    }
-    return FALSE;
 }
 
 bool ButtonsToolbar::show_config_popup(HWND wnd_parent)
@@ -668,17 +628,26 @@ bool ButtonsToolbar::show_config_popup(HWND wnd_parent)
     ConfigParam param;
     param.m_selection = nullptr;
     param.m_buttons = m_buttons;
-    param.m_child = nullptr;
     param.m_active = 0;
-    param.m_image = nullptr;
     param.m_text_below = m_text_below;
     param.m_appearance = m_appearance;
+    param.m_icon_size = m_icon_size;
+    param.m_width = m_width;
+    param.m_height = m_height;
 
-    const auto dialog_result = DialogBoxParam(mmh::get_current_instance(), MAKEINTRESOURCE(IDD_BUTTONS_OPTIONS),
-        wnd_parent, ConfigParam::g_ConfigPopupProc, reinterpret_cast<LPARAM>(&param));
+    dark::DialogDarkModeConfig dark_mode_config{.button_ids
+        = {IDC_PICK, IDC_ADD, IDC_REMOVE, IDC_RESET, IDC_BROWSE_ICON, IDC_BROWSE_HOVER_ICON, IDC_TOOLS, IDOK, IDCANCEL},
+        .checkbox_ids = {IDC_USE_CUSTOM_TEXT, IDC_USE_CUSTOM_ICON, IDC_USE_CUSTOM_HOVER_ICON},
+        .combo_box_ids = {IDC_SHOW, IDC_TEXT_LOCATION, IDC_APPEARANCE, IDC_ICON_SIZE},
+        .edit_ids = {IDC_TEXT, IDC_ICON_PATH, IDC_HOVER_ICON_PATH, IDC_WIDTH, IDC_HEIGHT},
+        .spin_ids = {IDC_WIDTH_SPIN, IDC_HEIGHT_SPIN}};
+
+    const auto dialog_result = modal_dialog_box(IDD_BUTTONS_OPTIONS, dark_mode_config, wnd_parent,
+        [&param](auto&&... args) { return param.on_dialog_message(std::forward<decltype(args)>(args)...); });
 
     if (dialog_result > 0) {
-        configure(param.m_buttons, param.m_text_below, param.m_appearance);
+        configure(
+            param.m_buttons, param.m_text_below, param.m_appearance, param.m_icon_size, param.m_width, param.m_height);
         return true;
     }
     return false;

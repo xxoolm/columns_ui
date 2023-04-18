@@ -1,8 +1,4 @@
-/**
- * \file ng_playlist.cpp
- */
-
-#include "../stdafx.h"
+#include "pch.h"
 
 #include "ng_playlist.h"
 
@@ -38,7 +34,6 @@ const GUID g_artwork_lowpriority = {0xcb1c1c5d, 0x4f99, 0x4c24, {0xb2, 0x39, 0xa
 const GUID g_guid_grouping = {0xa28cc736, 0x2b8b, 0x484c, {0xb7, 0xa9, 0x4c, 0xc3, 0x12, 0xdb, 0xd3, 0x57}};
 
 std::vector<PlaylistView*> PlaylistView::g_windows;
-PlaylistView::SharedMesageWindow PlaylistView::g_global_mesage_window;
 
 ConfigGroups g_groups(g_groups_guid);
 
@@ -49,19 +44,19 @@ fbh::ConfigBool cfg_show_artwork(
     g_show_artwork_guid, false, [](auto&&) { button_items::ShowArtworkButton::s_on_change(); });
 fbh::ConfigUint32DpiAware cfg_artwork_width(g_artwork_width_guid, 100);
 
-void ConfigGroups::swap(t_size index1, t_size index2)
+void ConfigGroups::swap(size_t index1, size_t index2)
 {
     m_groups.swap_items(index1, index2);
     PlaylistView::g_on_groups_change();
 }
-void ConfigGroups::replace_group(t_size index, const Group& p_group)
+void ConfigGroups::replace_group(size_t index, const Group& p_group)
 {
     m_groups.replace_item(index, p_group);
     PlaylistView::g_on_groups_change();
 }
-t_size ConfigGroups::add_group(const Group& p_group, bool notify_playlist_views)
+size_t ConfigGroups::add_group(const Group& p_group, bool notify_playlist_views)
 {
-    t_size ret = m_groups.add_item(p_group);
+    size_t ret = m_groups.add_item(p_group);
     if (notify_playlist_views)
         PlaylistView::g_on_groups_change();
     return ret;
@@ -75,7 +70,7 @@ void ConfigGroups::set_groups(const pfc::list_base_const_t<Group>& p_groups, boo
         PlaylistView::g_on_groups_change();
 }
 
-void ConfigGroups::remove_group(t_size index)
+void ConfigGroups::remove_group(size_t index)
 {
     m_groups.remove_by_idx(index);
     PlaylistView::g_on_groups_change();
@@ -84,7 +79,7 @@ void ConfigGroups::remove_group(t_size index)
 void set_font_size(bool up)
 {
     LOGFONT lf_ng;
-    static_api_ptr_t<fonts::manager> api;
+    const auto api = fb2k::std_api_get<fonts::manager>();
     api->get_font(g_guid_items_font, lf_ng);
 
     fonts::get_next_font_size_step(lf_ng, up);
@@ -106,7 +101,7 @@ void PlaylistView::populate_list()
 }
 void PlaylistView::refresh_groups(bool b_update_columns)
 {
-    static_api_ptr_t<titleformat_compiler> p_compiler;
+    const auto p_compiler = titleformat_compiler::get();
     service_ptr_t<titleformat_object> p_script;
     service_ptr_t<titleformat_object> p_script_group;
     m_scripts.remove_all();
@@ -115,9 +110,9 @@ void PlaylistView::refresh_groups(bool b_update_columns)
     pfc::string8 playlist_name;
     m_playlist_api->activeplaylist_get_name(playlist_name);
 
-    t_size count = cfg_grouping ? g_groups.get_groups().get_count() : 0;
-    t_size used_count = 0;
-    for (t_size i = 0; i < count; i++) {
+    size_t count = cfg_grouping ? g_groups.get_groups().get_count() : 0;
+    size_t used_count = 0;
+    for (size_t i = 0; i < count; i++) {
         bool b_valid = false;
         switch (g_groups.get_groups()[i].filter_type) {
         case FILTER_NONE:
@@ -141,11 +136,11 @@ void PlaylistView::refresh_groups(bool b_update_columns)
     set_group_count(used_count, b_update_columns);
 }
 
-t_size PlaylistView::column_index_display_to_actual(t_size display_index)
+size_t PlaylistView::column_index_display_to_actual(size_t display_index)
 {
-    t_size count = m_column_mask.get_count();
-    t_size counter = 0;
-    for (t_size i = 0; i < count; i++) {
+    size_t count = m_column_mask.get_count();
+    size_t counter = 0;
+    for (size_t i = 0; i < count; i++) {
         if (m_column_mask[i])
             if (counter++ == display_index)
                 return i;
@@ -153,11 +148,11 @@ t_size PlaylistView::column_index_display_to_actual(t_size display_index)
     throw pfc::exception_bug_check();
 }
 
-t_size PlaylistView::column_index_actual_to_display(t_size actual_index)
+size_t PlaylistView::column_index_actual_to_display(size_t actual_index)
 {
-    t_size count = m_column_mask.get_count();
-    t_size counter = 0;
-    for (t_size i = 0; i < count; i++) {
+    size_t count = m_column_mask.get_count();
+    size_t counter = 0;
+    for (size_t i = 0; i < count; i++) {
         if (m_column_mask[i]) {
             counter++;
             if (i == actual_index)
@@ -169,9 +164,9 @@ t_size PlaylistView::column_index_actual_to_display(t_size actual_index)
 }
 void PlaylistView::on_column_widths_change()
 {
-    t_size count = m_column_mask.get_count();
+    size_t count = m_column_mask.get_count();
     std::vector<int> widths;
-    for (t_size i = 0; i < count; i++)
+    for (size_t i = 0; i < count; i++)
         if (m_column_mask[i])
             widths.emplace_back(g_columns[i]->width);
     set_column_widths(widths);
@@ -185,7 +180,7 @@ void PlaylistView::g_on_column_widths_change(const PlaylistView* p_skip)
 }
 void PlaylistView::refresh_columns()
 {
-    static_api_ptr_t<titleformat_compiler> p_compiler;
+    const auto p_compiler = titleformat_compiler::get();
     service_ptr_t<titleformat_object> p_script;
     service_ptr_t<titleformat_object> p_script_group;
     m_script_global.release();
@@ -203,9 +198,9 @@ void PlaylistView::refresh_columns()
         p_compiler->compile_safe(m_script_global, cfg_globalstring);
     p_compiler->compile_safe(m_script_global_style, cfg_colour);
 
-    t_size count = g_columns.get_count();
+    size_t count = g_columns.get_count();
     m_column_mask.set_size(count);
-    for (t_size i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         PlaylistViewColumn* source = g_columns[i].get();
         bool b_valid = false;
         if (source->show) {
@@ -258,7 +253,7 @@ void PlaylistView::on_groups_change()
 
 void PlaylistView::update_all_items()
 {
-    static_api_ptr_t<titleformat_compiler> p_compiler;
+    const auto p_compiler = titleformat_compiler::get();
     service_ptr_t<titleformat_object> p_script;
     service_ptr_t<titleformat_object> p_script_group;
 
@@ -275,11 +270,11 @@ void PlaylistView::refresh_all_items_text()
 {
     update_items(0, get_item_count());
 }
-void PlaylistView::update_items(t_size index, t_size count)
+void PlaylistView::update_items(size_t index, size_t count)
 {
-    for (t_size i = 0; i < count; i++) {
-        t_size cg = get_item(i + index)->get_group_count();
-        for (t_size j = 0; j < cg; j++)
+    for (size_t i = 0; i < count; i++) {
+        size_t cg = get_item(i + index)->get_group_count();
+        for (size_t j = 0; j < cg; j++)
             get_item(i + index)->get_group(j)->m_style_data.release();
         get_item(i + index)->m_style_data.set_count(0);
     }
@@ -329,21 +324,21 @@ void PlaylistView::g_on_vertical_item_padding_change()
 void PlaylistView::g_on_font_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_items_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_items_font, lf);
     for (auto& window : g_windows)
         window->set_font(&lf);
 }
 void PlaylistView::g_on_header_font_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_header_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_header_font, lf);
     for (auto& window : g_windows)
         window->set_header_font(&lf);
 }
 void PlaylistView::g_on_group_header_font_change()
 {
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_group_header_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_group_header_font, lf);
     for (auto& window : g_windows)
         window->set_group_font(&lf);
 }
@@ -418,107 +413,260 @@ void PlaylistView::s_redraw_all()
         RedrawWindow(window->get_wnd(), nullptr, nullptr, RDW_INVALIDATE);
 }
 
+const char* PlaylistView::PlaylistViewSearchContext::get_item_text(size_t index)
+{
+    constexpr size_t max_batch_size = 1000;
+
+    if (!m_start_index) {
+        m_playlist_manager->activeplaylist_get_all_items(m_tracks);
+        m_items.resize(m_tracks.size());
+        GetLocalTime(&m_systemtime);
+        m_start_index = index;
+    } else if (m_items[index]) {
+        return m_items[index]->c_str();
+    }
+
+    const auto batch_end_index
+        = std::min(index + max_batch_size, index < *m_start_index ? *m_start_index : m_tracks.size());
+
+    const auto batch_size = batch_end_index - index;
+    const auto batch_tracks = pfc::list_partial_ref_t(m_tracks, index, batch_size);
+
+    const bool has_global_variables = m_global_script.is_valid();
+
+    m_metadb->queryMulti_(batch_tracks, [this, index, has_global_variables](size_t offset, const metadb_v2_rec_t& rec) {
+        metadb_handle_v2::ptr track;
+        track &= m_tracks[index + offset];
+
+        GlobalVariableList global_variables;
+        DateTitleformatHook tf_hook_date(&m_systemtime);
+        PlaylistNameTitleformatHook tf_hook_playlist_name;
+
+        if (has_global_variables) {
+            SetGlobalTitleformatHook<true, false> tf_hook_set_global(global_variables);
+            SplitterTitleformatHook tf_hook(&tf_hook_set_global, &tf_hook_date, &tf_hook_playlist_name);
+            pfc::string8 _;
+            track->formatTitle_v2(rec, &tf_hook, _, m_global_script, nullptr);
+        }
+
+        std::string title;
+        mmh::StringAdaptor adapted_title(title);
+
+        SetGlobalTitleformatHook<false, true> tf_hook_get_global(global_variables);
+        SplitterTitleformatHook tf_hook(
+            has_global_variables ? &tf_hook_get_global : nullptr, &tf_hook_date, &tf_hook_playlist_name);
+        track->formatTitle_v2(rec, &tf_hook, adapted_title, m_column_script, nullptr);
+        m_items[index + offset] = std::move(title);
+    });
+
+    return m_items[index]->c_str();
+}
+
+void PlaylistView::s_create_message_window()
+{
+    uie::container_window_v3_config config(L"{columns_ui_playlist_view_message_window_goJRO8xwg7s}", false);
+    config.window_styles = 0;
+    config.extended_window_styles = 0;
+
+    s_message_window = std::make_unique<uie::container_window_v3>(
+        config, [](auto&& wnd, auto&& msg, auto&& wp, auto&& lp) -> LRESULT {
+            if (msg == WM_TIMECHANGE)
+                g_on_time_change();
+            return DefWindowProc(wnd, msg, wp, lp);
+        });
+    s_message_window->create(nullptr);
+}
+
+void PlaylistView::s_destroy_message_window()
+{
+    s_message_window->destroy();
+    s_message_window.reset();
+}
+
 int g_compare_wchar(const pfc::array_t<WCHAR>& a, const pfc::array_t<WCHAR>& b)
 {
     return StrCmpLogicalW(a.get_ptr(), b.get_ptr());
 }
-void PlaylistView::notify_sort_column(t_size index, bool b_descending, bool b_selection_only)
+void PlaylistView::notify_sort_column(size_t index, bool b_descending, bool b_selection_only)
 {
-    unsigned active_playlist = m_playlist_api->get_active_playlist();
-    if (active_playlist != -1
-        && (!m_playlist_api->playlist_lock_is_present(active_playlist)
-            || !(m_playlist_api->playlist_lock_get_filter_mask(active_playlist) & playlist_lock::filter_reorder))) {
-        unsigned n;
-        unsigned count = m_playlist_api->activeplaylist_get_item_count();
+    const auto active_playlist = m_playlist_api->get_active_playlist();
 
-        pfc::list_t<pfc::array_t<WCHAR>, pfc::alloc_fast_aggressive> data;
-        pfc::list_t<t_size, pfc::alloc_fast_aggressive> source_indices;
-        data.set_count(count);
-        source_indices.prealloc(count);
+    if (active_playlist == std::numeric_limits<size_t>::max()
+        || (m_playlist_api->playlist_lock_is_present(active_playlist)
+            && (m_playlist_api->playlist_lock_get_filter_mask(active_playlist) & playlist_lock::filter_reorder)))
+        return;
 
-        pfc::string8_fast_aggressive temp;
-        pfc::string8_fast_aggressive temp2;
-        temp.prealloc(512);
+    if (static_api_test_t<metadb_v2>())
+        sort_by_column_fb2k_v2(index, b_descending, b_selection_only);
+    else
+        sort_by_column_fb2k_v1(index, b_descending, b_selection_only);
+}
 
-        bool extra = m_script_global.is_valid() && cfg_global_sort;
+void PlaylistView::sort_by_column_fb2k_v1(size_t column_index, bool b_descending, bool b_selection_only)
+{
+    const auto count = m_playlist_api->activeplaylist_get_item_count();
 
-        bit_array_bittable mask(count);
-        if (b_selection_only)
-            m_playlist_api->activeplaylist_get_selection_mask(mask);
+    std::vector<std::wstring> data{count};
+    pfc::list_t<size_t, pfc::alloc_fast_aggressive> source_indices;
+    source_indices.prealloc(count);
 
-        SYSTEMTIME st;
-        GetLocalTime(&st);
+    pfc::string8_fast_aggressive temp;
+    pfc::string8_fast_aggressive temp2;
+    temp.prealloc(512);
 
-        t_size counter = 0;
+    bool extra = m_script_global.is_valid() && cfg_global_sort;
 
-        for (n = 0; n < count; n++) {
-            if (!b_selection_only || mask[n]) {
-                GlobalVariableList extra_items;
+    bit_array_bittable mask(count);
+    if (b_selection_only)
+        m_playlist_api->activeplaylist_get_selection_mask(mask);
 
-                {
-                    DateTitleformatHook tf_hook_date(&st);
-                    PlaylistNameTitleformatHook tf_hook_playlist_name;
+    SYSTEMTIME st;
+    GetLocalTime(&st);
 
-                    if (extra) {
-                        SetGlobalTitleformatHook<true, false> tf_hook_set_global(extra_items);
-                        SplitterTitleformatHook tf_hook(&tf_hook_set_global, &tf_hook_date, &tf_hook_playlist_name);
-                        pfc::string8 output;
-                        m_playlist_api->activeplaylist_item_format_title(
-                            n, &tf_hook, output, m_script_global, nullptr, play_control::display_level_none);
-                    }
+    size_t counter = 0;
 
-                    SetGlobalTitleformatHook<false, true> tf_hook_get_global(extra_items);
-                    SplitterTitleformatHook tf_hook(
-                        extra ? &tf_hook_get_global : nullptr, &tf_hook_date, &tf_hook_playlist_name);
-                    m_playlist_api->activeplaylist_item_format_title(n, &tf_hook, temp,
-                        m_column_data[index].m_sort_script, nullptr, play_control::display_level_none);
+    for (size_t n{0}; n < count; n++) {
+        if (!b_selection_only || mask[n]) {
+            GlobalVariableList extra_items;
+
+            {
+                DateTitleformatHook tf_hook_date(&st);
+                PlaylistNameTitleformatHook tf_hook_playlist_name;
+
+                if (extra) {
+                    SetGlobalTitleformatHook<true, false> tf_hook_set_global(extra_items);
+                    SplitterTitleformatHook tf_hook(&tf_hook_set_global, &tf_hook_date, &tf_hook_playlist_name);
+                    pfc::string8 output;
+                    m_playlist_api->activeplaylist_item_format_title(
+                        n, &tf_hook, output, m_script_global, nullptr, play_control::display_level_none);
                 }
 
-                const char* ptr = temp.get_ptr();
-                if (strchr(ptr, 3)) {
-                    titleformat_compiler::remove_color_marks(ptr, temp2);
-                    ptr = temp2;
-                }
-
-                data[counter].set_size(pfc::stringcvt::estimate_utf8_to_wide_quick(ptr));
-                pfc::stringcvt::convert_utf8_to_wide_unchecked(data[counter].get_ptr(), ptr);
-
-                counter++;
-                if (b_selection_only)
-                    source_indices.add_item(n);
+                SetGlobalTitleformatHook<false, true> tf_hook_get_global(extra_items);
+                SplitterTitleformatHook tf_hook(
+                    extra ? &tf_hook_get_global : nullptr, &tf_hook_date, &tf_hook_playlist_name);
+                m_playlist_api->activeplaylist_item_format_title(n, &tf_hook, temp,
+                    m_column_data[column_index].m_sort_script, nullptr, play_control::display_level_none);
             }
-        }
-        data.set_size(counter);
 
-        /*if (descending)
-        {
-            data.sort(sort_info_callback_base<sort_info*>::desc_sort_callback());
-        }
-        else
-        {
-            sort_info_callback_base<sort_info*>::asc_sort_callback cc;
-            data.sort(cc);
-        }*/
-
-        mmh::Permutation order(data.get_count());
-        sort_get_permutation(data.get_ptr(), order, g_compare_wchar, true, b_descending, true);
-
-        m_playlist_api->activeplaylist_undo_backup();
-        if (b_selection_only) {
-            mmh::Permutation order2(count);
-            t_size count2 = data.get_count();
-            for (n = 0; n < count2; n++) {
-                order2[source_indices[n]] = source_indices[order[n]];
+            const char* ptr = temp.get_ptr();
+            if (strchr(ptr, 3)) {
+                titleformat_compiler::remove_color_marks(ptr, temp2);
+                ptr = temp2;
             }
-            m_playlist_api->activeplaylist_reorder_items(order2.data(), count);
-        } else
-            m_playlist_api->activeplaylist_reorder_items(order.data(), count);
 
-        // if (!selection_only)
-        {
+            data[counter].resize(pfc::stringcvt::estimate_utf8_to_wide_quick(ptr));
+            pfc::stringcvt::convert_utf8_to_wide_unchecked(data[counter].data(), ptr);
+
+            counter++;
+            if (b_selection_only)
+                source_indices.add_item(n);
         }
     }
+    data.resize(counter);
+
+    mmh::Permutation order(data.size());
+    sort_get_permutation(
+        data.data(), order, [](auto&& left, auto&& right) { return StrCmpLogicalW(left.c_str(), right.c_str()); }, true,
+        b_descending, true);
+
+    m_playlist_api->activeplaylist_undo_backup();
+    if (b_selection_only) {
+        mmh::Permutation order2(count);
+        size_t count2 = data.size();
+        for (size_t n{0}; n < count2; n++) {
+            order2[source_indices[n]] = source_indices[order[n]];
+        }
+        m_playlist_api->activeplaylist_reorder_items(order2.data(), count);
+    } else
+        m_playlist_api->activeplaylist_reorder_items(order.data(), count);
 }
+
+void PlaylistView::sort_by_column_fb2k_v2(size_t column_index, bool b_descending, bool b_selection_only)
+{
+    const auto playlist_size = m_playlist_api->activeplaylist_get_item_count();
+
+    bit_array_bittable mask(playlist_size);
+    if (b_selection_only)
+        m_playlist_api->activeplaylist_get_selection_mask(mask);
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+
+    metadb_handle_list tracks;
+
+    if (b_selection_only)
+        m_playlist_api->activeplaylist_get_selected_items(tracks);
+    else
+        m_playlist_api->activeplaylist_get_all_items(tracks);
+
+    const bool extra = m_script_global.is_valid() && cfg_global_sort;
+    std::vector<std::wstring> data{tracks.size()};
+
+    metadb_v2::get()->queryMultiParallel_(
+        tracks, [this, &tracks, &data, &st, extra, column_index](size_t index, const metadb_v2::rec_t& rec) {
+            metadb_handle_v2::ptr track;
+            track &= tracks[index];
+
+            GlobalVariableList extra_items;
+            DateTitleformatHook tf_hook_date(&st);
+            PlaylistNameTitleformatHook tf_hook_playlist_name;
+
+            if (extra) {
+                SetGlobalTitleformatHook<true, false> tf_hook_set_global(extra_items);
+                SplitterTitleformatHook tf_hook(&tf_hook_set_global, &tf_hook_date, &tf_hook_playlist_name);
+                pfc::string8 output;
+                track->formatTitle_v2(rec, &tf_hook, output, m_script_global, nullptr);
+            }
+
+            std::string title;
+            mmh::StringAdaptor adapted_title(title);
+
+            SetGlobalTitleformatHook<false, true> tf_hook_get_global(extra_items);
+            SplitterTitleformatHook tf_hook(
+                extra ? &tf_hook_get_global : nullptr, &tf_hook_date, &tf_hook_playlist_name);
+            track->formatTitle_v2(rec, &tf_hook, adapted_title, m_column_data[column_index].m_sort_script, nullptr);
+
+            const char* ptr = title.c_str();
+            if (strchr(ptr, 3)) {
+                pfc::string8_fast_aggressive title_without_colour_codes;
+                title_without_colour_codes.prealloc(title.length());
+
+                titleformat_compiler::remove_color_marks(ptr, title_without_colour_codes);
+                ptr = title_without_colour_codes;
+            }
+
+            data[index].resize(pfc::stringcvt::estimate_utf8_to_wide_quick(ptr));
+            pfc::stringcvt::convert_utf8_to_wide_unchecked(data[index].data(), ptr);
+        });
+
+    mmh::Permutation sorted_items_order(data.size());
+    sort_get_permutation(
+        data.data(), sorted_items_order,
+        [](auto&& left, auto&& right) { return StrCmpLogicalW(left.c_str(), right.c_str()); }, true, b_descending,
+        true);
+
+    m_playlist_api->activeplaylist_undo_backup();
+
+    if (!b_selection_only) {
+        m_playlist_api->activeplaylist_reorder_items(sorted_items_order.data(), playlist_size);
+    } else {
+        std::vector<size_t> source_indices;
+        source_indices.reserve(tracks.size());
+
+        for (auto index : std::ranges::views::iota(size_t{}, playlist_size)) {
+            if (mask[index])
+                source_indices.emplace_back(index);
+        }
+
+        mmh::Permutation all_items_order(playlist_size);
+
+        for (auto index : std::ranges::views::iota(size_t{}, tracks.size())) {
+            all_items_order[source_indices[index]] = source_indices[sorted_items_order[index]];
+        }
+        m_playlist_api->activeplaylist_reorder_items(all_items_order.data(), playlist_size);
+    }
+}
+
 void PlaylistView::notify_on_initialisation()
 {
     set_use_dark_mode(colours::is_dark_mode_active());
@@ -531,11 +679,11 @@ void PlaylistView::notify_on_initialisation()
         config_object::g_get_data_bool_simple(standard_config_objects::bool_playback_follows_cursor, false));
     set_vertical_item_padding(settings::playlist_view_item_padding);
     LOGFONT lf;
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_items_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_items_font, lf);
     set_font(&lf);
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_header_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_header_font, lf);
     set_header_font(&lf);
-    static_api_ptr_t<fonts::manager>()->get_font(g_guid_group_header_font, lf);
+    fb2k::std_api_get<fonts::manager>()->get_font(g_guid_group_header_font, lf);
     set_group_font(&lf);
     set_sorting_enabled(cfg_header_hottrack != 0);
     set_show_sort_indicators(cfg_show_sort_arrows != 0);
@@ -569,7 +717,8 @@ void PlaylistView::notify_on_create()
     RegisterDragDrop(get_wnd(), IDT_playlist.get());
 
     if (g_windows.empty())
-        g_global_mesage_window.create(nullptr);
+        s_create_message_window();
+
     g_windows.push_back(this);
 
     set_day_timer();
@@ -582,7 +731,7 @@ void PlaylistView::notify_on_destroy()
 {
     std::erase(g_windows, this);
     if (g_windows.empty())
-        g_global_mesage_window.destroy();
+        s_destroy_message_window();
 
     RevokeDragDrop(get_wnd());
     m_playlist_api->unregister_callback(static_cast<playlist_callback_single*>(this));
@@ -593,6 +742,9 @@ void PlaylistView::notify_on_destroy()
     m_script_global_style.release();
     m_playlist_api.release();
     m_column_mask.set_size(0);
+
+    m_library_autocomplete_v1.reset();
+    m_library_autocomplete_v2.reset();
 
     m_artwork_manager->deinitialise();
     m_artwork_manager.reset();
@@ -608,7 +760,7 @@ void PlaylistView::notify_on_destroy()
 
 void PlaylistView::notify_on_set_focus(HWND wnd_lost)
 {
-    m_selection_holder = static_api_ptr_t<ui_selection_manager>()->acquire();
+    m_selection_holder = ui_selection_manager::get()->acquire();
     m_selection_holder->set_playlist_selection_tracking();
 }
 void PlaylistView::notify_on_kill_focus(HWND wnd_receiving)
@@ -632,14 +784,14 @@ bool PlaylistView::notify_on_contextmenu_header(const POINT& pt, const HDHITTEST
 
     HMENU menu = CreatePopupMenu();
     HMENU selection_menu = CreatePopupMenu();
-    t_size index = pfc_infinite;
+    size_t index = pfc_infinite;
     if (!(hittest.flags & HHT_NOWHERE) && is_header_column_real(hittest.iItem)) {
         index = header_column_to_real_column(hittest.iItem);
         uAppendMenu(menu, (MF_STRING), IDM_ASC, "&Sort ascending");
         uAppendMenu(menu, (MF_STRING), IDM_DES, "Sort &descending");
         uAppendMenu(selection_menu, (MF_STRING), IDM_SEL_ASC, "Sort a&scending");
         uAppendMenu(selection_menu, (MF_STRING), IDM_SEL_DES, "Sort d&escending");
-        uAppendMenu(menu, MF_STRING | MF_POPUP, (UINT)selection_menu, "Se&lection");
+        uAppendMenu(menu, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(selection_menu), "Se&lection");
         uAppendMenu(menu, (MF_SEPARATOR), 0, "");
         uAppendMenu(menu, (MF_STRING), IDM_EDIT_COLUMN, "&Edit this column");
         uAppendMenu(menu, (MF_SEPARATOR), 0, "");
@@ -651,14 +803,14 @@ bool PlaylistView::notify_on_contextmenu_header(const POINT& pt, const HDHITTEST
         uAppendMenu(menu, (MF_SEPARATOR), 0, "");
 
         pfc::string8 playlist_name;
-        static_api_ptr_t<playlist_manager> playlist_api;
+        const auto playlist_api = playlist_manager::get();
         playlist_api->activeplaylist_get_name(playlist_name);
 
         pfc::string8_fast_aggressive filter;
         pfc::string8_fast_aggressive name;
 
-        int e = g_columns.get_count();
-        for (int s = 0; s < e; s++) {
+        const auto e = g_columns.get_count();
+        for (size_t s = 0; s < e; s++) {
             bool add = false;
             switch (g_columns[s]->filter_type) {
             case FILTER_NONE: {
@@ -709,12 +861,12 @@ bool PlaylistView::notify_on_contextmenu_header(const POINT& pt, const HDHITTEST
         cfg_nohscroll = cfg_nohscroll == 0;
         g_on_autosize_change();
     } else if (cmd == IDM_PREFS) {
-        static_api_ptr_t<ui_control>()->show_preferences(columns::config_get_playlist_view_guid());
+        ui_control::get()->show_preferences(columns::config_get_playlist_view_guid());
     } else if (cmd == IDM_ARTWORK) {
         cfg_show_artwork = !cfg_show_artwork;
         g_on_show_artwork_change();
     } else if (cmd >= IDM_CUSTOM_BASE) {
-        if (t_size(cmd - IDM_CUSTOM_BASE) < g_columns.get_count()) {
+        if (size_t(cmd - IDM_CUSTOM_BASE) < g_columns.get_count()) {
             g_columns[cmd - IDM_CUSTOM_BASE]->show = !g_columns[cmd - IDM_CUSTOM_BASE]->show; // g_columns
             g_on_columns_change();
         }
@@ -766,7 +918,9 @@ bool PlaylistView::notify_on_contextmenu(const POINT& pt, bool from_keyboard)
         ID_CUSTOM_BASE = 0x8000,
     };
 
-    const auto playlist_selection_exists = m_playlist_api->activeplaylist_get_selection_count(1) > 0;
+    playlist_position_reference_tracker selected_item;
+    const auto selection_count = m_playlist_api->activeplaylist_get_selection_count(2);
+    const auto playlist_selection_exists = selection_count > 0;
     const auto show_shortcuts = standard_config_objects::query_show_keyboard_shortcuts_in_menus();
     HMENU menu = CreatePopupMenu();
 
@@ -774,6 +928,34 @@ bool PlaylistView::notify_on_contextmenu(const POINT& pt, bool from_keyboard)
     const auto mainmenu_flags = show_shortcuts ? mainmenu_manager::flag_show_shortcuts : 0;
     const auto mainmenu_part
         = playlist_selection_exists ? mainmenu_groups::edit_part2_selection : mainmenu_groups::edit_part1;
+
+    if (selection_count == 1) {
+        selected_item.m_playlist = m_playlist_api->get_active_playlist();
+
+        pfc::bit_array_bittable selection(m_playlist_api->activeplaylist_get_item_count());
+        m_playlist_api->activeplaylist_get_selection_mask(selection);
+
+        for (const auto index : std::ranges::views::iota(size_t{}, selection.size())) {
+            if (selection[index]) {
+                selected_item.m_item = index;
+                break;
+            }
+        }
+
+        constexpr auto play_text = L"Play"sv;
+
+        MENUITEMINFO mii{};
+        mii.cbSize = sizeof(MENUITEMINFO);
+        mii.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
+        mii.dwTypeData = const_cast<wchar_t*>(play_text.data());
+        mii.cch = gsl::narrow<UINT>(play_text.size());
+        mii.wID = ID_PLAY;
+        mii.fState = MFS_DEFAULT;
+
+        InsertMenuItem(menu, 0, TRUE, &mii);
+        AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+    }
+
     mainmenu_api->instantiate(mainmenu_part);
     mainmenu_api->generate_menu_win32(menu, ID_SELECTION, ID_CUSTOM_BASE - ID_SELECTION, mainmenu_flags);
 
@@ -801,7 +983,7 @@ bool PlaylistView::notify_on_contextmenu(const POINT& pt, bool from_keyboard)
 
         const keyboard_shortcut_manager::shortcut_type shortcuts[]
             = {keyboard_shortcut_manager::TYPE_CONTEXT_PLAYLIST, keyboard_shortcut_manager::TYPE_CONTEXT};
-        contextmenu_api->set_shortcut_preference(shortcuts, tabsize(shortcuts));
+        contextmenu_api->set_shortcut_preference(shortcuts, gsl::narrow<unsigned>(std::size(shortcuts)));
         contextmenu_api->init_context_playlist(contextmenu_flags);
         contextmenu_api->win32_build_menu(menu, ID_CUSTOM_BASE, -1);
     }
@@ -821,7 +1003,12 @@ bool PlaylistView::notify_on_contextmenu(const POINT& pt, bool from_keyboard)
     m_mainmenu_manager.release();
     m_contextmenu_manager.release();
 
-    if (cmd == ID_CUT) {
+    if (cmd == ID_PLAY) {
+        if (selected_item.m_playlist != std::numeric_limits<size_t>::max()
+            && selected_item.m_item != std::numeric_limits<size_t>::max()) {
+            m_playlist_api->playlist_execute_default_action(selected_item.m_playlist, selected_item.m_item);
+        }
+    } else if (cmd == ID_CUT) {
         playlist_utils::cut();
     } else if (cmd == ID_COPY) {
         playlist_utils::copy();
@@ -839,14 +1026,10 @@ bool PlaylistView::notify_on_contextmenu(const POINT& pt, bool from_keyboard)
     return true;
 }
 
-void PlaylistView::notify_update_item_data(t_size index)
+void PlaylistView::notify_update_item_data(size_t index)
 {
     string_array& p_out = get_item_subitems(index);
     PlaylistViewItem* p_item = get_item(index);
-
-    t_size group_index = 0;
-    t_size group_count = 0;
-    // uih::ListView::get_item_group(index, get_group_count()-1, group_index, group_count);
 
     pfc::string8_fast_aggressive temp;
     pfc::string8_fast_aggressive str_dummy;
@@ -869,9 +1052,9 @@ void PlaylistView::notify_update_item_data(t_size index)
     CellStyleData style_data_item = CellStyleData::g_create_default();
 
     bool colour_global_av = false;
-    t_size i;
-    t_size count = m_column_data.get_count();
-    t_size count_display_groups = get_item_display_group_count(index);
+    size_t i;
+    size_t count = m_column_data.get_count();
+    size_t count_display_groups = get_item_display_group_count(index);
     p_out.resize(count);
     get_item(index)->m_style_data.set_count(count);
 
@@ -880,9 +1063,9 @@ void PlaylistView::notify_update_item_data(t_size index)
 
     SetGlobalTitleformatHook<false, true> tf_hook_get_global(globals);
 
-    t_size item_index = get_item_display_index(index);
+    size_t item_index = get_item_display_index(index);
     for (i = 0; i < count_display_groups; i++) {
-        t_size count_groups = p_item->get_group_count();
+        size_t count_groups = p_item->get_group_count();
         CellStyleData style_data_group = CellStyleData::g_create_default();
         if (ptr.is_valid() && m_script_global_style.is_valid()) {
             StyleTitleformatHook tf_hook_style(style_data_group, item_index - i - 1, true);
@@ -934,14 +1117,14 @@ void PlaylistView::notify_update_item_data(t_size index)
     }
 }
 
-const style_data_t& PlaylistView::get_style_data(t_size index)
+const style_data_t& PlaylistView::get_style_data(size_t index)
 {
     if (get_item(index)->m_style_data.get_count() != get_column_count()) {
         notify_update_item_data(index);
     }
     return get_item(index)->m_style_data;
 }
-bool PlaylistView::notify_on_middleclick(bool on_item, t_size index)
+bool PlaylistView::notify_on_middleclick(bool on_item, size_t index)
 {
     return playlist_item_helpers::MiddleClickActionManager::run(cfg_playlist_middle_action, on_item, index);
 }
@@ -953,7 +1136,7 @@ bool PlaylistView::notify_on_doubleleftclick_nowhere()
 }
 
 void PlaylistView::get_insert_items(
-    /*t_size p_playlist, */ t_size start, t_size count, InsertItemsContainer& items)
+    /*size_t p_playlist, */ size_t start, size_t count, InsertItemsContainer& items)
 {
     items.set_count(count);
 
@@ -964,6 +1147,27 @@ void PlaylistView::get_insert_items(
     m_playlist_api->activeplaylist_get_items(handles, bit_table);
 
     const auto group_count = m_scripts.get_count();
+    const auto metadb_v2_api = metadb_v2::tryGet();
+
+    if (metadb_v2_api.is_valid()) {
+        metadb_v2_api->queryMultiParallel_(
+            handles, [this, &handles, &items, group_count](size_t index, const metadb_v2::rec_t& rec) {
+                metadb_handle_v2::ptr track;
+                track &= handles[index];
+
+                std::string title;
+                mmh::StringAdaptor adapted_string(title);
+
+                items[index].m_groups.resize(group_count);
+
+                for (auto&& [script, group] : ranges::views::zip(m_scripts, items[index].m_groups)) {
+                    track->formatTitle_v2(rec, nullptr, adapted_string, script, nullptr);
+                    group = title.c_str();
+                }
+            });
+
+        return;
+    }
 
     concurrency::parallel_for(size_t{0}, count, [this, &items, &handles, group_count](size_t index) {
         pfc::string8_fast temp;
@@ -990,11 +1194,11 @@ void PlaylistView::reset_items()
     insert_items(0, items.get_size(), items.get_ptr());
 }
 
-t_size PlaylistView::get_highlight_item()
+size_t PlaylistView::get_highlight_item()
 {
-    if (static_api_ptr_t<play_control>()->is_playing()) {
-        t_size playing_index;
-        t_size playing_playlist;
+    if (play_control::get()->is_playing()) {
+        size_t playing_index;
+        size_t playing_playlist;
         m_playlist_api->get_playing_item_location(&playing_playlist, &playing_index);
         if (playing_playlist == m_playlist_api->get_active_playlist())
             return playing_index;
@@ -1043,34 +1247,34 @@ bool PlaylistView::notify_on_keyboard_keydown_paste()
     return playlist_utils::paste_at_focused_item(get_wnd());
 };
 
-t_size PlaylistView::storage_get_focus_item()
+size_t PlaylistView::storage_get_focus_item()
 {
-    return static_api_ptr_t<playlist_manager>()->activeplaylist_get_focus_item();
+    return playlist_manager::get()->activeplaylist_get_focus_item();
 }
-void PlaylistView::storage_set_focus_item(t_size index)
+void PlaylistView::storage_set_focus_item(size_t index)
 {
     pfc::vartoggle_t<bool> tog(m_ignore_callback, true);
-    static_api_ptr_t<playlist_manager>()->activeplaylist_set_focus_item(index);
+    playlist_manager::get()->activeplaylist_set_focus_item(index);
 }
 void PlaylistView::storage_get_selection_state(bit_array_var& out)
 {
-    static_api_ptr_t<playlist_manager>()->activeplaylist_get_selection_mask(out);
+    playlist_manager::get()->activeplaylist_get_selection_mask(out);
 }
 bool PlaylistView::storage_set_selection_state(
     const bit_array& p_affected, const bit_array& p_status, bit_array_var* p_changed)
 {
     pfc::vartoggle_t<bool> tog(m_ignore_callback, true);
 
-    static_api_ptr_t<playlist_manager> api;
+    const auto api = playlist_manager::get();
 
-    t_size count = api->activeplaylist_get_item_count();
+    size_t count = api->activeplaylist_get_item_count();
     bit_array_bittable previous_state(count);
 
     api->activeplaylist_get_selection_mask(previous_state);
 
     bool b_changed = false;
 
-    for (t_size i = 0; i < count; i++)
+    for (size_t i = 0; i < count; i++)
         if (p_affected.get(i) && (p_status.get(i) != previous_state.get(i))) {
             b_changed = true;
             if (p_changed)
@@ -1082,19 +1286,19 @@ bool PlaylistView::storage_set_selection_state(
     api->activeplaylist_set_selection(p_affected, p_status);
     return b_changed;
 }
-bool PlaylistView::storage_get_item_selected(t_size index)
+bool PlaylistView::storage_get_item_selected(size_t index)
 {
-    return static_api_ptr_t<playlist_manager>()->activeplaylist_is_item_selected(index);
+    return playlist_manager::get()->activeplaylist_is_item_selected(index);
 }
-t_size PlaylistView::storage_get_selection_count(t_size max)
+size_t PlaylistView::storage_get_selection_count(size_t max)
 {
-    return static_api_ptr_t<playlist_manager>()->activeplaylist_get_selection_count(max);
+    return playlist_manager::get()->activeplaylist_get_selection_count(max);
 }
 
-void PlaylistView::execute_default_action(t_size index, t_size column, bool b_keyboard, bool b_ctrl)
+void PlaylistView::execute_default_action(size_t index, size_t column, bool b_keyboard, bool b_ctrl)
 {
     if (b_keyboard && b_ctrl) {
-        t_size active = m_playlist_api->get_active_playlist();
+        size_t active = m_playlist_api->get_active_playlist();
         if (active != -1)
             m_playlist_api->queue_add_item_playlist(active, index);
     } else {
@@ -1183,14 +1387,14 @@ PlaylistViewItemFontClient::factory<PlaylistViewItemFontClient> g_font_client_ng
 PlaylistViewHeaderFontClient::factory<PlaylistViewHeaderFontClient> g_font_header_client_ngpv;
 PlaylistViewGroupFontClient::factory<PlaylistViewGroupFontClient> g_font_group_header_client_ngpv;
 
-void ColoursClient::on_colour_changed(t_size mask) const
+void ColoursClient::on_colour_changed(uint32_t mask) const
 {
     if (cfg_show_artwork && cfg_artwork_reflection && (mask & (colours::colour_flag_background)))
         PlaylistView::g_flush_artwork();
     PlaylistView::g_update_all_items();
 }
 
-void ColoursClient::on_bool_changed(t_size mask) const
+void ColoursClient::on_bool_changed(uint32_t mask) const
 {
     if (mask & colours::bool_flag_dark_mode_enabled)
         PlaylistView::s_on_dark_mode_status_change();

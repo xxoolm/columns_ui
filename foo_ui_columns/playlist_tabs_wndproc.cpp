@@ -1,6 +1,7 @@
-#include "stdafx.h"
+#include "pch.h"
 
 #include "common.h"
+#include "dark_mode.h"
 #include "playlist_tabs.h"
 #include "playlist_manager_utils.h"
 
@@ -49,10 +50,15 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             m_host->set_this(this);
             create_child();
         }
-        static_api_ptr_t<playlist_manager>()->register_callback(this, flag_all);
+        playlist_manager::get()->register_callback(this, flag_all);
+        m_dark_mode_notifier
+            = std::make_unique<colours::dark_mode_notifier>([this, self = ptr{this}, wnd, wnd_tabs = wnd_tabs] {
+                  set_up_down_window_theme();
+                  RedrawWindow(wnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE);
+                  RedrawWindow(wnd_tabs, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE);
+              });
         break;
     }
-
     case WM_SHOWWINDOW: {
         if (wp == TRUE && lp == NULL && !IsWindowVisible(m_child_wnd)) {
             ShowWindow(m_child_wnd, SW_SHOWNORMAL);
@@ -74,7 +80,8 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
     }
         return 0;
     case WM_DESTROY: {
-        static_api_ptr_t<playlist_manager>()->unregister_callback(this);
+        m_dark_mode_notifier.reset();
+        playlist_manager::get()->unregister_callback(this);
         destroy_child();
         m_host.release();
         RevokeDragDrop(wnd);
@@ -109,8 +116,8 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                 int idx = TabCtrl_HitTest(wnd_tabs, &hittest);
 
                 if (idx < 0) {
-                    static_api_ptr_t<playlist_manager> playlist_api;
-                    unsigned new_idx
+                    const auto playlist_api = playlist_manager::get();
+                    const auto new_idx
                         = playlist_api->create_playlist("Untitled", 12, playlist_api->get_playlist_count());
                     playlist_api->set_active_playlist(new_idx);
                     return 0;
@@ -123,7 +130,7 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
             m_switch_timer = false;
             KillTimer(wnd, SWITCH_TIMER_ID);
             if (!m_playlist_switched) {
-                static_api_ptr_t<playlist_manager> playlist_api;
+                const auto playlist_api = playlist_manager::get();
                 if (m_switch_playlist < playlist_api->get_playlist_count())
                     playlist_api->set_active_playlist(m_switch_playlist);
 
@@ -235,15 +242,15 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                     idx = TabCtrl_HitTest(wnd_tabs, &hittest);
                 }
 
-                static_api_ptr_t<playlist_manager_v3> playlist_api;
+                const auto playlist_api = playlist_manager_v3::get();
 
-                unsigned num = playlist_api->get_playlist_count();
-                unsigned active = playlist_api->get_active_playlist();
+                auto num = playlist_api->get_playlist_count();
+                auto active = playlist_api->get_active_playlist();
                 bool b_index_valid = idx < num;
 
                 metadb_handle_list_t<pfc::alloc_fast_aggressive> data;
 
-                static_api_ptr_t<autoplaylist_manager> autoplaylist_api;
+                const auto autoplaylist_api = autoplaylist_manager::get();
                 autoplaylist_client_v2::ptr autoplaylist;
 
                 try {
@@ -273,7 +280,7 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                         autoplaylist->get_display_name(name);
                         name << " properties";
 
-                        AppendMenu(menu, MF_STRING, ID_AUTOPLAYLIST, uT(name));
+                        uAppendMenu(menu, MF_STRING, ID_AUTOPLAYLIST, name);
                     }
                     AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
 
@@ -292,14 +299,15 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
 
                 if (num)
                     AppendMenu(menu, MF_STRING, ID_SAVE_ALL, _T("Save all as..."));
-                pfc::array_t<t_size> recycler_ids;
+                pfc::array_t<uint32_t> recycler_ids;
                 {
-                    t_size recycler_count = playlist_api->recycler_get_count();
+                    const auto recycler_count
+                        = gsl::narrow<unsigned>(std::min(playlist_api->recycler_get_count(), size_t{UINT32_MAX}));
                     if (recycler_count) {
                         recycler_ids.set_count(recycler_count);
                         HMENU recycler_popup = CreatePopupMenu();
                         pfc::string8_fast_aggressive temp;
-                        for (t_size i = 0; i < recycler_count; i++) {
+                        for (size_t i = 0; i < recycler_count; i++) {
                             playlist_api->recycler_get_name(i, temp);
                             recycler_ids[i] = playlist_api->recycler_get_id(i); // Menu Message Loop !
                             uAppendMenu(recycler_popup, MF_STRING, ID_RECYCLER_BASE + i, temp);
@@ -367,11 +375,11 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
                             break;
                         case ID_CUT:
                             if (b_index_valid)
-                                playlist_manager_utils::cut(pfc::list_single_ref_t<t_size>(idx));
+                                playlist_manager_utils::cut(pfc::list_single_ref_t<size_t>(idx));
                             break;
                         case ID_COPY:
                             if (b_index_valid)
-                                playlist_manager_utils::copy(pfc::list_single_ref_t<t_size>(idx));
+                                playlist_manager_utils::copy(pfc::list_single_ref_t<size_t>(idx));
                             break;
                         case ID_PASTE:
                             if (b_index_valid)
@@ -437,7 +445,7 @@ LRESULT PlaylistTabs::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         case 5002:
             switch (((LPNMHDR)lp)->code) {
             case TCN_SELCHANGE: {
-                static_api_ptr_t<playlist_manager>()->set_active_playlist(TabCtrl_GetCurSel(((LPNMHDR)lp)->hwndFrom));
+                playlist_manager::get()->set_active_playlist(TabCtrl_GetCurSel(((LPNMHDR)lp)->hwndFrom));
             } break;
             }
             break;
